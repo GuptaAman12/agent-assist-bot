@@ -5,12 +5,15 @@ from assembly import upload_audio, get_transcript
 from intent import detect_intent
 import os
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI()
 
 # Allow frontend access
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )

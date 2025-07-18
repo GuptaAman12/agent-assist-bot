@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Agent Assist Bot</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>🎙️ Agent Assist Bot</h1>
+    <input type="file" id="fileInput" accept=".wav" />
+    <button onclick="uploadAudio()">Upload & Transcribe</button>
+    <div id="output">
+      <h3>Transcript:</h3>
+      <p id="transcript"></p>
+      <h3>Intent:</h3>
+      <p id="intent"></p>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
