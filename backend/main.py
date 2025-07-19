@@ -1,32 +1,86 @@
-# backend/main.py
-from fastapi import FastAPI, UploadFile, File
-from fastapi.middleware.cors import CORSMiddleware
-from assembly import upload_audio, get_transcript
-from intent import detect_intent
 import os
+import json
+import requests
+from fastapi import FastAPI, File, UploadFile
+from pydantic import BaseModel
+from dotenv import load_dotenv
 
-from fastapi.middleware.cors import CORSMiddleware
+load_dotenv()
+
+ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY")
 
 app = FastAPI()
 
-# Allow frontend access
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Load knowledge base
+with open("knowledge_base.json", "r") as f:
+    knowledge_base = json.load(f)
+
+# Simple intents for AI voice takeover
+simple_intents = ["password_reset", "check_balance"]
+
+def transcribe_audio(file_path):
+    headers = {'authorization': ASSEMBLYAI_API_KEY}
+    upload_url = "https://api.assemblyai.com/v2/upload"
+
+    # Upload file
+    with open(file_path, 'rb') as f:
+        response = requests.post(upload_url, headers=headers, files={'file': f})
+    audio_url = response.json()['upload_url']
+
+    # Request transcription
+    transcript_req = {"audio_url": audio_url}
+    transcript_res = requests.post(
+        "https://api.assemblyai.com/v2/transcript",
+        json=transcript_req,
+        headers=headers
+    )
+    transcript_id = transcript_res.json()['id']
+
+    # Poll until complete
+    polling_url = f"https://api.assemblyai.com/v2/transcript/{transcript_id}"
+    while True:
+        status_res = requests.get(polling_url, headers=headers)
+        status = status_res.json()
+        if status['status'] == 'completed':
+            return status['text']
+        elif status['status'] == 'error':
+            raise Exception("Transcription failed")
 
 @app.post("/transcribe/")
 async def transcribe(file: UploadFile = File(...)):
-    temp_path = f"temp_{file.filename}"
+    contents = await file.read()
+    temp_path = "temp.wav"
     with open(temp_path, "wb") as f:
-        f.write(await file.read())
+        f.write(contents)
+    
+    transcript = transcribe_audio(temp_path)
 
-    audio_url = upload_audio(temp_path)
-    transcript = get_transcript(audio_url)
-    intent = detect_intent(transcript)
+    # Basic intent detection
+    intent = ""
+    if "password" in transcript.lower():
+        intent = "password_reset"
+    elif "balance" in transcript.lower():
+        intent = "check_balance"
+    elif "address" in transcript.lower():
+        intent = "update_address"
+    else:
+        intent = "unknown"
 
-    os.remove(temp_path)
     return {"transcript": transcript, "intent": intent}
+
+
+class TranscriptionRequest(BaseModel):
+    transcript: str
+    intent: str
+
+@app.post("/assist/")
+def assist_agent(request: TranscriptionRequest):
+    for entry in knowledge_base:
+        if entry["intent"] == request.intent:
+            response = entry["response"]
+            ai_takeover = request.intent in simple_intents
+            return {
+                "response": response,
+                "ai_takeover": ai_takeover
+            }
+    return {"response": "Sorry, no info found", "ai_takeover": False}

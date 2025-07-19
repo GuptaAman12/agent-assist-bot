@@ -1,9 +1,5 @@
-<<<<<<< HEAD
 .env
 __pycache__/
 *.pyc
 *.log
 venv/
-=======
-".env" 
->>>>>>> 99626ec3895b4af85c587a43903e370af04caed2
