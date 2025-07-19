@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Agent Assist UI</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Agent Assist Dashboard</h1>
+    <form id="upload-form">
+      <input type="file" name="file" accept=".wav" required />
+      <button type="submit">Upload & Transcribe</button>
+    </form>
+
+    <div id="result">
+      <p><strong>Transcript:</strong> <span id="transcript"></span></p>
+      <p><strong>Intent:</strong> <span id="intent"></span></p>
+      <p><strong>Response:</strong> <span id="response"></span></p>
+      <p><strong>AI Takeover:</strong> <span id="takeover"></span></p>
+      <audio id="audio-player" controls style="display: none;"></audio>
+    </div>
+  </div>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>

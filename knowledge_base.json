@@ -1,0 +1,14 @@
+[
+  {
+    "question": "How do I reset my password?",
+    "response": "To reset your password, go to the login page, click 'Forgot Password', and follow the instructions."
+  },
+  {
+    "question": "How can I check my account balance?",
+    "response": "Log into your account dashboard and click on 'My Account' to see your current balance."
+  },
+  {
+    "question": "How do I update my address?",
+    "response": "You can update your address in the profile settings under the 'Address Information' section."
+  }
+]
