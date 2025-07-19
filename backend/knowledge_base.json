@@ -1,0 +1,14 @@
+[
+  {
+    "intent": "password_reset",
+    "response": "To reset your password, click 'Forgot Password' on the login page and follow instructions."
+  },
+  {
+    "intent": "check_balance",
+    "response": "You can check your balance by logging into your account and clicking on 'My Balance'."
+  },
+  {
+    "intent": "update_address",
+    "response": "To update your address, go to your profile settings and edit your contact details."
+  }
+]

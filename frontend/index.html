@@ -1,24 +1,20 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Agent Assist Bot</title>
-  <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8">
+    <title>Real-Time Agent Assist</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <div class="container">
-    <h1>🎙️ Agent Assist Bot</h1>
-    <input type="file" id="fileInput" accept=".wav" />
-    <button onclick="uploadAudio()">Upload & Transcribe</button>
-    <div id="output">
-      <h3>Transcript:</h3>
-      <p id="transcript"></p>
-      <h3>Intent:</h3>
-      <p id="intent"></p>
+    <h2>Real-Time Agent Assist</h2>
+    <input type="file" id="audioFile">
+    <button onclick="uploadFile()">Upload & Transcribe</button>
+    <div id="result">
+        <p><strong>Transcript:</strong> <span id="transcript"></span></p>
+        <p><strong>Intent:</strong> <span id="intent"></span></p>
+        <p><strong>Suggested Response:</strong> <span id="response"></span></p>
+        <p><strong>AI Takeover:</strong> <span id="ai"></span></p>
     </div>
-  </div>
-
-  <script src="script.js"></script>
+    <script src="/static/script.js"></script>
 </body>
 </html>
