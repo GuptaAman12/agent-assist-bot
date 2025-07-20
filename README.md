@@ -32,16 +32,17 @@ A real-time customer support system that transcribes live audio, detects user in
 1. **Clone this repo**
 
 git clone https://github.com/yourusername/agent-assist-bot
+
 cd agent-assist-bot
 
 2. **Install dependencies**
 
 pip install -r requirements.txt
-Set environment variables
 
 3. **Create a .env file:**
 
 ASSEMBLYAI_API_KEY=your_assembly_ai_key
+
 GROQ_API_KEY=your_groq_api_key
 
 4. **Run the server**
