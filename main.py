@@ -1,4 +1,3 @@
-# File: main.py
 import os
 import json
 import requests
@@ -106,7 +105,7 @@ def generate_with_groq(context, query):
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "llama3-70b-8192",  # ✅ most stable and powerful
+        "model": "llama3-70b-8192",  
         "messages": [
             {"role": "system", "content": "You are a helpful support assistant."},
             {"role": "user", "content": f"Context: {context}\n\nQuery: {query}"}
