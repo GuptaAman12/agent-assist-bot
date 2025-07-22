@@ -31,7 +31,7 @@ A real-time customer support system that transcribes live audio, detects user in
 
 1. **Clone this repo**
 
-git clone https://github.com/yourusername/agent-assist-bot
+git clone https://github.com/GuptaAman12/agent-assist-bot
 
 cd agent-assist-bot
 
