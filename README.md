@@ -8,7 +8,7 @@ A real-time customer support system that transcribes live audio, detects user in
 
 - 🔊 Upload `.wav` audio (or drag & drop) → instant transcript via AssemblyAI.
 - 🎯 Intent detection from the transcript (password reset, refunds, order tracking…).
-- 🧠 Context-aware RAG using `sentence-transformers` — knowledge-base embeddings are computed once at startup.
+- 🧠 Context-aware RAG using `sentence-transformers` - knowledge-base embeddings are computed once at startup.
 - 💬 Answer generation using **Groq** (`openai/gpt-oss-120b` by default).
 - 🤖 AI takeover: simple intents are answered aloud by a realistic neural voice (**Groq Orpheus**), with automatic gTTS fallback.
 - 🖥️ Modern dashboard: light/dark mode, session history, markdown-rendered responses, live API status, copy-to-clipboard.
