@@ -3,3 +3,12 @@ __pycache__/
 *.pyc
 *.log
 venv/
+.venv/
+
+# runtime artifacts
+temp.wav
+static/ai_response_*.mp3
+static/ai_response_*.wav
+
+# local tooling with embedded secrets — never commit
+claude-setup.ps1
