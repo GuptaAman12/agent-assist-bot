@@ -10,5 +10,5 @@ temp.wav
 static/ai_response_*.mp3
 static/ai_response_*.wav
 
-# local tooling with embedded secrets — never commit
+# local tooling 
 claude-setup.ps1
