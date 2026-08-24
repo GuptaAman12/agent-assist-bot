@@ -4,6 +4,9 @@ __pycache__/
 *.log
 venv/
 .venv/
+uv.lock
+pyproject.toml
+.python-version
 
 # runtime artifacts
 temp.wav

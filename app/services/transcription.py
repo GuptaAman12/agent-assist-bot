@@ -28,41 +28,96 @@ def transcribe_file(path: str) -> str:
     headers = {"authorization": config.ASSEMBLYAI_API_KEY}
 
     with open(path, "rb") as f:
-        upload_data = _check(
-            requests.post(
+
+        # FIX 1: Handle network errors during audio upload
+        
+        # requests.post() can raise RequestException when the request
+        # fails before receiving an HTTP response, such as a timeout,
+        # DNS failure, or connection error.
+        #
+        # Previously, this exception was not caught and could result
+        # in an unhandled server error.
+        try:
+            response = requests.post(
                 config.ASSEMBLYAI_UPLOAD_URL,
                 headers=headers,
                 files={"file": f},
                 timeout=config.REQUEST_TIMEOUT_SEC * 2,
-            ),
-            "upload",
-        )
+            )
+        except requests.RequestException as exc:
+            raise TranscriptionError(
+                f"AssemblyAI upload request failed: {exc}"
+            ) from exc
+
+        upload_data = _check(response, "upload")
+
     audio_url = upload_data.get("upload_url")
     if not audio_url:
         raise TranscriptionError("AssemblyAI upload response missing 'upload_url'")
 
-    transcript_data = _check(
-        requests.post(
+    # FIX 2: Handle network errors during transcript creation
+
+    # Convert requests-level failures into the existing
+    # TranscriptionError type so they can be handled consistently
+    # by the API layer.
+    try:
+        response = requests.post(
             config.ASSEMBLYAI_TRANSCRIPT_URL,
             json={"audio_url": audio_url},
             headers=headers,
             timeout=config.REQUEST_TIMEOUT_SEC,
-        ),
-        "transcript creation",
-    )
+        )
+    except requests.RequestException as exc:
+        raise TranscriptionError(
+            f"AssemblyAI transcript creation request failed: {exc}"
+        ) from exc
+
+    transcript_data = _check(response, "transcript creation")
+
     transcript_id = transcript_data.get("id")
     if not transcript_id:
-        raise TranscriptionError("AssemblyAI transcript creation response missing 'id'")
+        raise TranscriptionError(
+            "AssemblyAI transcript creation response missing 'id'"
+        )
 
     polling_url = f"{config.ASSEMBLYAI_TRANSCRIPT_URL}/{transcript_id}"
     deadline = time.monotonic() + config.TRANSCRIPTION_TIMEOUT_SEC
+
     while True:
-        status_data = _check(requests.get(polling_url, headers=headers, timeout=config.REQUEST_TIMEOUT_SEC), "polling")
+
+        # FIX 3: Handle network errors during transcription polling
+
+        # Polling performs a separate network request, so it can fail
+        # independently of the upload and transcript creation steps.
+        try:
+            response = requests.get(
+                polling_url,
+                headers=headers,
+                timeout=config.REQUEST_TIMEOUT_SEC,
+            )
+        except requests.RequestException as exc:
+            raise TranscriptionError(
+                f"AssemblyAI polling request failed: {exc}"
+            ) from exc
+
+        status_data = _check(response, "polling")
+
         status = status_data.get("status")
+
         if status == "completed":
             return status_data["text"]
+
         if status == "error":
-            raise TranscriptionError(f"Transcription failed: {status_data.get('error', 'unknown error')}")
+            raise TranscriptionError(
+                f"Transcription failed: "
+                f"{status_data.get('error', 'unknown error')}"
+            )
+
         if time.monotonic() > deadline:
-            raise TranscriptionTimeout(f"Transcription timed out after {config.TRANSCRIPTION_TIMEOUT_SEC}s (last status: {status})")
+            raise TranscriptionTimeout(
+                f"Transcription timed out after "
+                f"{config.TRANSCRIPTION_TIMEOUT_SEC}s "
+                f"(last status: {status})"
+            )
+
         time.sleep(config.TRANSCRIPTION_POLL_INTERVAL_SEC)
