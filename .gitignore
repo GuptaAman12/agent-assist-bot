@@ -15,3 +15,6 @@ static/ai_response_*.wav
 
 # local tooling 
 claude-setup.ps1
+
+# agent instructions
+AGENTS.md
