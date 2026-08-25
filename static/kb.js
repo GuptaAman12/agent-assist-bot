@@ -7,10 +7,14 @@ const els = {
   question: document.getElementById('kb-question'),
   response: document.getElementById('kb-response'),
   addBtn: document.getElementById('kb-add-btn'),
-  error: document.getElementById('kb-error')
+  error: document.getElementById('kb-error'),
+  themeToggle: document.getElementById('theme-toggle'),
+  iconMoon: document.getElementById('icon-moon'),
+  iconSun: document.getElementById('icon-sun')
 };
 
 let entries = [];
+let editingId = null;
 
 async function postJson(url, options) {
   const res = await fetch(url, options);
@@ -31,6 +35,141 @@ function clearError() {
   els.error.hidden = true;
 }
 
+function syncThemeIcon() {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  els.iconMoon.hidden = dark;
+  els.iconSun.hidden = !dark;
+  const label = dark ? 'Switch to light mode' : 'Switch to dark mode';
+  els.themeToggle.setAttribute('aria-label', label);
+  els.themeToggle.title = label;
+}
+
+els.themeToggle.addEventListener('click', () => {
+  const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('theme', next); } catch {}
+  syncThemeIcon();
+});
+
+function makeInput(className, value, placeholder) {
+  const input = document.createElement('input');
+  input.className = className;
+  input.type = 'text';
+  input.value = value;
+  input.placeholder = placeholder;
+  input.autocomplete = 'off';
+  return input;
+}
+
+function makeTextArea(className, value, placeholder) {
+  const area = document.createElement('textarea');
+  area.className = className;
+  area.rows = 3;
+  area.value = value;
+  area.placeholder = placeholder;
+  return area;
+}
+
+function makeButton(className, text, title) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = className;
+  btn.textContent = text;
+  btn.title = title;
+  return btn;
+}
+
+function renderItem(li, entry) {
+  li.innerHTML = '';
+
+  if (editingId === entry.id) {
+    li.classList.add('editing');
+    const form = document.createElement('div');
+    form.className = 'kb-edit-form';
+
+    const q = makeInput('kb-edit-input', entry.question, 'Question (optional)');
+    const a = makeTextArea('kb-edit-textarea', entry.response, 'Answer text');
+
+    const actions = document.createElement('div');
+    actions.className = 'kb-actions';
+    const save = makeButton('btn-primary btn-small', 'Save', 'Save changes to this entry');
+    const cancel = makeButton('btn-ghost btn-small', 'Cancel', 'Discard changes');
+
+    save.addEventListener('click', async () => {
+      clearError();
+      const newResponse = a.value.trim();
+      if (!newResponse) {
+        showError('Answer text is required.');
+        return;
+      }
+      save.disabled = true;
+      try {
+        const updated = await postJson(`/kb/${entry.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: q.value.trim(), response: newResponse })
+        });
+        const idx = entries.findIndex(e => e.id === entry.id);
+        entries[idx] = updated;
+        editingId = null;
+        render();
+      } catch (err) {
+        showError(err.message);
+        save.disabled = false;
+      }
+    });
+
+    cancel.addEventListener('click', () => {
+      editingId = null;
+      clearError();
+      render();
+    });
+
+    actions.append(save, cancel);
+    form.append(q, a, actions);
+    li.appendChild(form);
+    return;
+  }
+
+  li.classList.remove('editing');
+  const text = document.createElement('div');
+  text.className = 'kb-text';
+  const q = document.createElement('span');
+  q.className = 'kb-q';
+  q.textContent = entry.question || '(no question)';
+  const a = document.createElement('span');
+  a.className = 'kb-a';
+  a.textContent = entry.response;
+  text.append(q, a);
+
+  const actions = document.createElement('div');
+  actions.className = 'kb-actions';
+
+  const edit = makeButton('btn-ghost btn-small', 'Edit', 'Edit this entry');
+  edit.addEventListener('click', () => {
+    editingId = entry.id;
+    clearError();
+    render();
+    li.querySelector('.kb-edit-input')?.focus();
+  });
+
+  const del = makeButton('kb-del', '\u00d7', 'Delete this entry');
+  del.setAttribute('aria-label', 'Delete entry');
+  del.addEventListener('click', async () => {
+    clearError();
+    try {
+      await postJson(`/kb/${entry.id}`, { method: 'DELETE' });
+      entries = entries.filter(e => e.id !== entry.id);
+      render();
+    } catch (err) {
+      showError(err.message);
+    }
+  });
+
+  actions.append(edit, del);
+  li.append(text, actions);
+}
+
 function render() {
   const filter = els.search.value.trim().toLowerCase();
   const visible = entries.filter(e =>
@@ -43,32 +182,7 @@ function render() {
   visible.forEach(entry => {
     const li = document.createElement('li');
     li.className = 'kb-item';
-    const text = document.createElement('div');
-    text.className = 'kb-text';
-    const q = document.createElement('span');
-    q.className = 'kb-q';
-    q.textContent = entry.question || '(no question)';
-    const a = document.createElement('span');
-    a.className = 'kb-a';
-    a.textContent = entry.response;
-    text.append(q, a);
-    const del = document.createElement('button');
-    del.type = 'button';
-    del.className = 'kb-del';
-    del.textContent = '\u00d7';
-    del.title = 'Delete this entry';
-    del.setAttribute('aria-label', 'Delete entry');
-    del.addEventListener('click', async () => {
-      clearError();
-      try {
-        await postJson(`/kb/${entry.id}`, { method: 'DELETE' });
-        entries = entries.filter(e => e.id !== entry.id);
-        render();
-      } catch (err) {
-        showError(err.message);
-      }
-    });
-    li.append(text, del);
+    renderItem(li, entry);
     els.list.appendChild(li);
   });
 }
@@ -78,6 +192,7 @@ async function refresh() {
   try {
     const data = await postJson('/kb', {});
     entries = data.entries;
+    editingId = null;
     render();
   } catch (err) {
     showError(err.message);
@@ -122,4 +237,5 @@ els.addForm.addEventListener('submit', async e => {
   }
 });
 
+syncThemeIcon();
 refresh();

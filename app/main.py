@@ -112,6 +112,18 @@ def kb_add(entry: KBEntryRequest):
     return created
 
 
+@app.put("/kb/{entry_id}")
+def kb_update(entry_id: str, entry: KBEntryRequest):
+    kb: KnowledgeBase = app.state.knowledge_base
+    try:
+        updated = kb.update_entry(entry_id, entry.question, entry.response)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Unknown entry id: {entry_id}")
+    return updated
+
+
 @app.delete("/kb/{entry_id}")
 def kb_delete(entry_id: str):
     kb: KnowledgeBase = app.state.knowledge_base

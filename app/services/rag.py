@@ -74,6 +74,23 @@ class KnowledgeBase:
         self._touch_mtime()
         return {"id": entry_id, "question": entry["question"], "response": response}
 
+    def update_entry(self, entry_id: str, question: str, response: str) -> dict | None:
+        response = response.strip()
+        if not response:
+            raise ValueError("'response' must be a non-empty string")
+        entry = {"question": question.strip(), "response": response}
+        embedding = self._model.encode(response, convert_to_tensor=True)
+        with self._lock:
+            if entry_id not in self._ids:
+                return None
+            idx = self._ids.index(entry_id)
+            self._entries[idx] = entry
+            self._corpus_embeddings[idx] = embedding
+            to_save = [dict(e) for e in self._entries]
+        _persist(to_save)
+        self._touch_mtime()
+        return {"id": entry_id, "question": entry["question"], "response": response}
+
     def remove_entry(self, entry_id: str) -> bool:
         with self._lock:
             if entry_id not in self._ids:

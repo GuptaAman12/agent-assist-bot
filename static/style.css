@@ -394,6 +394,29 @@ button { font: inherit; cursor: pointer; color: inherit; }
 
 .kb-error { margin-top: 10px; }
 
+.kb-item.editing { flex-direction: column; align-items: stretch; }
+.kb-edit-form { display: grid; gap: 8px; }
+.kb-edit-input,
+.kb-edit-textarea {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+.kb-edit-input:focus,
+.kb-edit-textarea:focus { outline: none; box-shadow: 0 0 0 1px var(--accent); }
+.kb-item .kb-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.btn-primary.btn-small {
+  width: auto;
+  margin-top: 0;
+  padding: 5px 12px;
+}
+
 .kb-page { grid-template-columns: minmax(0, 760px); justify-content: center; }
 .kb-main-card { display: block; }
 .kb-hint { margin: 0 0 14px; font-size: 13px; color: var(--muted); }
