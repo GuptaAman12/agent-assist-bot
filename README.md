@@ -9,10 +9,11 @@ A real-time customer support system that transcribes live audio, detects user in
 - 🔊 Upload `.wav` audio (or drag & drop) → instant transcript via AssemblyAI.
 - 🎯 Intent detection from the transcript (password reset, refunds, order tracking…).
 - 🧠 Context-aware RAG using `sentence-transformers` - knowledge-base embeddings are computed once at startup.
-- 📝 **Hot-reloadable knowledge base** - add/remove entries from the dashboard or edit `knowledge_base.json` directly; changes apply without restarting (invalid edits keep serving the last good state).
+- 📝 **Hot-reloadable knowledge base** - add, edit, and remove entries from a dedicated manager page, or edit `knowledge_base.json` directly; changes apply without restarting (invalid edits keep serving the last good state).
 - 💬 Answer generation using **Groq** (`openai/gpt-oss-120b` by default).
 - 🤖 AI takeover: simple intents are answered aloud by a realistic neural voice (**Groq Orpheus**), with automatic gTTS fallback.
 - 🖥️ Modern dashboard: light/dark mode, session history, markdown-rendered responses, live API status, copy-to-clipboard.
+- 📚 Knowledge base manager at `/static/kb.html`: search, inline editing, add/delete, reload from disk.
 
 ## 🛠️ Tech Stack
 
@@ -62,7 +63,7 @@ A real-time customer support system that transcribes live audio, detects user in
    uvicorn main:app --reload
    ```
 
-5. Open 👉 http://127.0.0.1:8000/ (redirects to the UI)
+5. Open 👉 http://127.0.0.1:8000/ (redirects to the UI) — knowledge base manager at http://127.0.0.1:8000/static/kb.html
 
 The first startup downloads the `all-MiniLM-L6-v2` embedding model from HuggingFace, so it can take a while. Interactive API docs are at `/docs`.
 
@@ -79,7 +80,7 @@ app/
     ├── intent.py          # keyword-based intent detection
     └── tts.py             # Groq Orpheus TTS with gTTS fallback
 main.py                    # thin shim so `uvicorn main:app` works
-static/                    # frontend + generated audio responses
+static/                    # dashboard UI, KB manager page, generated audio
 knowledge_base.json        # RAG corpus
 ```
 
@@ -92,6 +93,7 @@ knowledge_base.json        # RAG corpus
 | `GET /health`        | –                           | `{"status": "ok"}`                                           |
 | `GET /kb`            | –                           | `{count, entries: [{id, question, response}]}`               |
 | `POST /kb`           | `{question?, response}`     | created entry                                                |
+| `PUT /kb/{id}`       | `{question?, response}`     | updated entry (re-embedded immediately)                      |
 | `DELETE /kb/{id}`    | –                           | `{deleted, count}`                                           |
 | `POST /kb/reload`    | –                           | `{reloaded, count}`                                          |
 
