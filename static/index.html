@@ -12,7 +12,7 @@
       document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     })();
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=7">
+  <link rel="stylesheet" href="/static/style.css?v=8">
 </head>
 <body>
   <header class="topbar">
@@ -23,7 +23,8 @@
       <span class="brand-name">Agent Assist</span>
       <span class="brand-tag">Resolution Bot</span>
     </div>
-    <div class="topbar-actions">
+    <nav class="topbar-actions">
+      <a href="/static/kb.html" class="nav-link" title="View and edit knowledge base entries">Knowledge base</a>
       <div id="api-status" class="status-pill status-checking">Checking API…</div>
       <button type="button" id="theme-toggle" class="icon-btn" aria-label="Toggle dark mode" title="Toggle dark / light mode">
         <svg id="icon-moon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -55,23 +56,6 @@
         </form>
         <div id="error" class="error-banner" hidden></div>
         <div id="stage-note" class="stage-note" hidden></div>
-      </section>
-
-      <section class="card" id="kb-card">
-        <details open>
-          <summary class="card-title kb-summary">Knowledge base (<span id="kb-count">0</span>)</summary>
-          <div class="kb-toolbar">
-            <input type="text" id="kb-search" placeholder="Filter entries…" autocomplete="off" />
-            <button type="button" id="kb-reload-btn" class="btn-ghost btn-small" title="Re-read knowledge_base.json from disk">Reload</button>
-          </div>
-          <ul id="kb-list" class="history-list kb-list"></ul>
-          <form id="kb-add-form" class="kb-add-form">
-            <input type="text" id="kb-question" placeholder="Question (optional)" autocomplete="off" />
-            <textarea id="kb-response" rows="2" placeholder="Answer text…" required></textarea>
-            <button type="submit" id="kb-add-btn" class="btn-ghost btn-small" title="Add entry and re-embed immediately">Add entry</button>
-          </form>
-          <p id="kb-error" class="error-banner kb-error" hidden></p>
-        </details>
       </section>
 
       <section class="card" id="history-card" hidden>
@@ -123,6 +107,6 @@
     </section>
   </main>
 
-  <script src="/static/script.js?v=7"></script>
+  <script src="/static/script.js?v=8"></script>
 </body>
 </html>
