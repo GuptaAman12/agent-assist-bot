@@ -88,3 +88,40 @@ def assist_agent(request: AssistRequest):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+class KBEntryRequest(BaseModel):
+    question: str = ""
+    response: str
+
+
+@app.get("/kb")
+def kb_list():
+    kb: KnowledgeBase = app.state.knowledge_base
+    entries = kb.snapshot()
+    return {"count": len(entries), "entries": entries}
+
+
+@app.post("/kb")
+def kb_add(entry: KBEntryRequest):
+    kb: KnowledgeBase = app.state.knowledge_base
+    try:
+        created = kb.add_entry(entry.question, entry.response)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return created
+
+
+@app.delete("/kb/{entry_id}")
+def kb_delete(entry_id: str):
+    kb: KnowledgeBase = app.state.knowledge_base
+    if not kb.remove_entry(entry_id):
+        raise HTTPException(status_code=404, detail=f"Unknown entry id: {entry_id}")
+    return {"deleted": entry_id, "count": kb.count}
+
+
+@app.post("/kb/reload")
+def kb_reload():
+    kb: KnowledgeBase = app.state.knowledge_base
+    kb.reload()
+    return {"reloaded": True, "count": kb.count}

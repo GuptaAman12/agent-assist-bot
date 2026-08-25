@@ -11,7 +11,7 @@ load_dotenv(BASE_DIR / ".env")
 ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
-GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
 EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 
 KNOWLEDGE_BASE_PATH = BASE_DIR / "knowledge_base.json"
@@ -59,7 +59,7 @@ def missing_api_keys() -> list[str]:
 
 
 def load_knowledge_base() -> list[dict]:
-    with open(KNOWLEDGE_BASE_PATH, "r", encoding="utf-8") as f:
+    with open(KNOWLEDGE_BASE_PATH, "r", encoding="utf-8-sig") as f:
         data = json.load(f)
     if not isinstance(data, list) or not data:
         raise ValueError(f"{KNOWLEDGE_BASE_PATH} must be a non-empty JSON array")

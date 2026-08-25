@@ -9,6 +9,7 @@ A real-time customer support system that transcribes live audio, detects user in
 - 🔊 Upload `.wav` audio (or drag & drop) → instant transcript via AssemblyAI.
 - 🎯 Intent detection from the transcript (password reset, refunds, order tracking…).
 - 🧠 Context-aware RAG using `sentence-transformers` - knowledge-base embeddings are computed once at startup.
+- 📝 **Hot-reloadable knowledge base** - add/remove entries from the dashboard or edit `knowledge_base.json` directly; changes apply without restarting (invalid edits keep serving the last good state).
 - 💬 Answer generation using **Groq** (`openai/gpt-oss-120b` by default).
 - 🤖 AI takeover: simple intents are answered aloud by a realistic neural voice (**Groq Orpheus**), with automatic gTTS fallback.
 - 🖥️ Modern dashboard: light/dark mode, session history, markdown-rendered responses, live API status, copy-to-clipboard.
@@ -89,8 +90,12 @@ knowledge_base.json        # RAG corpus
 | `POST /transcribe/`  | multipart `.wav` upload     | `{transcript, intent}`                                       |
 | `POST /assist/`      | `{transcript, intent}` JSON | `{response, ai_takeover, source, audio_url, tts_engine}`     |
 | `GET /health`        | –                           | `{"status": "ok"}`                                           |
+| `GET /kb`            | –                           | `{count, entries: [{id, question, response}]}`               |
+| `POST /kb`           | `{question?, response}`     | created entry                                                |
+| `DELETE /kb/{id}`    | –                           | `{deleted, count}`                                           |
+| `POST /kb/reload`    | –                           | `{reloaded, count}`                                          |
 
-`audio_url` is set only when `ai_takeover` is true (the response is spoken). Errors return a JSON `{"detail": "..."}` with an appropriate status code (502 for upstream API failures, 504 for transcription timeouts).
+`audio_url` is set only when `ai_takeover` is true (the response is spoken). Errors return a JSON `{"detail": "..."}` with an appropriate status code (502 for upstream API failures, 504 for transcription timeouts). KB entries can also be edited by modifying `knowledge_base.json` directly — the server detects the change and re-embeds on the next request.
 
 ### Test without a microphone
 
