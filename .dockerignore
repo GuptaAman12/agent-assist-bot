@@ -1,0 +1,15 @@
+.env
+claude-setup.ps1
+.git
+.gitignore
+__pycache__
+*.pyc
+*.log
+venv/
+.venv/
+temp.wav
+static/ai_response_*
+audio_sample/
+Dockerfile
+.dockerignore
+AGENTS.md

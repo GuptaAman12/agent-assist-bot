@@ -61,7 +61,17 @@ def transcribe(file: UploadFile = File(...)):
 @app.post("/assist/")
 def assist_agent(request: AssistRequest):
     kb: KnowledgeBase = app.state.knowledge_base
-    source = kb.best_response(request.transcript)
+    source, score = kb.best_match(request.transcript)
+
+    if source is None:
+        return {
+            "response": config.KB_NO_MATCH_RESPONSE,
+            "ai_takeover": False,
+            "source": None,
+            "audio_url": None,
+            "tts_engine": None,
+            "kb_score": round(score, 4),
+        }
 
     try:
         response_text = llm_service.generate_response(source, request.transcript)
@@ -82,6 +92,7 @@ def assist_agent(request: AssistRequest):
         "source": source,
         "audio_url": audio_url,
         "tts_engine": tts_engine,
+        "kb_score": round(score, 4),
     }
 
 

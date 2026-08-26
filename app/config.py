@@ -26,6 +26,12 @@ GROQ_TTS_MODEL = os.getenv("GROQ_TTS_MODEL", "canopylabs/orpheus-v1-english")
 GROQ_TTS_VOICE = os.getenv("GROQ_TTS_VOICE", "troy")
 TTS_MAX_INPUT_CHARS = 200
 
+KB_MIN_SIMILARITY = float(os.getenv("KB_MIN_SIMILARITY", "0.45"))
+KB_NO_MATCH_RESPONSE = os.getenv(
+    "KB_NO_MATCH_RESPONSE",
+    "I'm not sure about that one. Let me connect you with a human colleague who can help.",
+)
+
 TRANSCRIPTION_POLL_INTERVAL_SEC = 2
 TRANSCRIPTION_TIMEOUT_SEC = 120
 REQUEST_TIMEOUT_SEC = 60

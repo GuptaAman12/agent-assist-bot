@@ -9,6 +9,7 @@ A real-time customer support system that transcribes live audio, detects user in
 - 🔊 Upload `.wav` audio (or drag & drop) → instant transcript via AssemblyAI.
 - 🎯 Intent detection from the transcript (password reset, refunds, order tracking…).
 - 🧠 Context-aware RAG using `sentence-transformers` - knowledge-base embeddings are computed once at startup.
+- 🎚️ **Retrieval confidence threshold** - queries that don't match the knowledge base (cosine similarity below `KB_MIN_SIMILARITY`) get an honest "I'm not sure" instead of a confidently wrong answer, and skip the LLM call entirely.
 - 📝 **Hot-reloadable knowledge base** - add, edit, and remove entries from a dedicated manager page, or edit `knowledge_base.json` directly; changes apply without restarting (invalid edits keep serving the last good state).
 - 💬 Answer generation using **Groq** (`openai/gpt-oss-120b` by default).
 - 🤖 AI takeover: simple intents are answered aloud by a realistic neural voice (**Groq Orpheus**), with automatic gTTS fallback.
@@ -53,6 +54,7 @@ A real-time customer support system that transcribes live audio, detects user in
    ```
    GROQ_MODEL=openai/gpt-oss-120b        # chat model
    EMBEDDING_MODEL=all-MiniLM-L6-v2      # sentence-transformers model
+   KB_MIN_SIMILARITY=0.45                # below this, /assist/ answers "I'm not sure"
    GROQ_TTS_MODEL=canopylabs/orpheus-v1-english
    GROQ_TTS_VOICE=troy                   # autumn/diana/hannah/austin/daniel/troy
    ```
@@ -66,6 +68,19 @@ A real-time customer support system that transcribes live audio, detects user in
 5. Open 👉 http://127.0.0.1:8000/ (redirects to the UI) — knowledge base manager at http://127.0.0.1:8000/static/kb.html
 
 The first startup downloads the `all-MiniLM-L6-v2` embedding model from HuggingFace, so it can take a while. Interactive API docs are at `/docs`.
+
+## 🐳 Docker
+
+```
+docker build -t agent-assist-bot .
+docker run -p 8000:8000 --env-file .env agent-assist-bot
+```
+
+Keys are passed at runtime via `--env-file` — never baked into the image. First container start downloads the embedding model; mount a cache volume to persist it across restarts:
+
+```
+docker run -p 8000:8000 --env-file .env -v hf_cache:/app/.hf_cache agent-assist-bot
+```
 
 ## 📁 Project Structure
 

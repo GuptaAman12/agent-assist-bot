@@ -177,7 +177,8 @@ function showResult(item) {
   els.takeoverPill.className = 'takeover-pill ' + (item.aiTakeover ? 'takeover-yes' : 'takeover-no');
   els.timestamp.textContent = new Date(item.at).toLocaleString();
   els.response.innerHTML = item.responseHtml;
-  els.sourceText.textContent = item.source;
+  els.sourceText.textContent = item.source || '';
+  document.getElementById('source-card').hidden = !item.source;
 
   if (item.audioUrl) {
     els.audioCard.hidden = false;
