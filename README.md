@@ -42,14 +42,20 @@ A real-time customer support system that transcribes live audio, detects user in
    pip install -r requirements.txt
    ```
 
-3. **Create a `.env` file:**
+3. **Create a `.env` file** (copy the template):
 
    ```
    ASSEMBLYAI_API_KEY=your_assembly_ai_key
    GROQ_API_KEY=your_groq_api_key
    ```
 
-   Optional overrides:
+   A template with all keys is committed as `.env.example` — copy it, then fill in real values:
+
+   ```
+   cp .env.example .env
+   ```
+
+   Optional overrides (also listed in `.env.example`):
 
    ```
    GROQ_MODEL=openai/gpt-oss-120b        # chat model
@@ -71,12 +77,22 @@ The first startup downloads the `all-MiniLM-L6-v2` embedding model from HuggingF
 
 ## 🐳 Docker
 
+**Recommended (one command):**
+
+```
+docker compose up -d --build
+```
+
+Starts the full stack (ports, `.env` keys, model cache volume) from `docker-compose.yml` — then open http://localhost:8000/. In Docker Desktop you can start/stop the stack from the **Containers** tab without any commands.
+
+**Manual alternative:**
+
 ```
 docker build -t agent-assist-bot .
 docker run -p 8000:8000 --env-file .env agent-assist-bot
 ```
 
-Keys are passed at runtime via `--env-file` — never baked into the image. First container start downloads the embedding model; mount a cache volume to persist it across restarts:
+Keys are passed at runtime via `--env-file` — never baked into the image. First container start downloads the embedding model; compose mounts a cache volume automatically so it persists across restarts:
 
 ```
 docker run -p 8000:8000 --env-file .env -v hf_cache:/app/.hf_cache agent-assist-bot

@@ -1,0 +1,13 @@
+services:
+  app:
+    image: agent-assist-bot:latest
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - hf_cache:/app/.hf_cache
+
+volumes:
+  hf_cache:
