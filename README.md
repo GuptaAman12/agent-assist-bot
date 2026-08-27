@@ -75,6 +75,15 @@ A real-time customer support system that transcribes live audio, detects user in
 
 The first startup downloads the `all-MiniLM-L6-v2` embedding model from HuggingFace, so it can take a while. Interactive API docs are at `/docs`.
 
+## 🧪 Tests
+
+```
+pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+59 tests cover intent detection, KB hot-reload behavior (threshold, external edits, broken-file fail-open, ID stability), TTS stripping/normalization/fallback, AssemblyAI/Groq error paths, and the full API surface — all external calls and the embedding model are mocked, so tests run offline and fast. CI runs them on every push (`.github/workflows/ci.yml`).
+
 ## 🐳 Docker
 
 **Recommended (one command):**
