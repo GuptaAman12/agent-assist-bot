@@ -41,11 +41,34 @@ class AssistRequest(BaseModel):
 
 @app.post("/transcribe/")
 def transcribe(file: UploadFile = File(...)):
-    suffix = Path(file.filename or "upload.wav").suffix or ".wav"
-    fd, temp_path = tempfile.mkstemp(suffix=suffix)
+    suffix = (Path(file.filename or "").suffix or "").lower()
+    if suffix not in config.ALLOWED_UPLOAD_EXTENSIONS:
+        allowed = ", ".join(sorted(config.ALLOWED_UPLOAD_EXTENSIONS))
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported file type '{suffix or 'none'}'. Allowed: {allowed}",
+        )
+
+    try:
+        declared_size = int(file.headers.get("content-length", "0"))
+    except (TypeError, ValueError):
+        declared_size = 0
+    if declared_size > config.MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large: {declared_size} bytes (max {config.MAX_UPLOAD_BYTES})",
+        )
+
+    fd, temp_path = tempfile.mkstemp(suffix=suffix or ".wav")
     try:
         with os.fdopen(fd, "wb") as f:
-            f.write(file.file.read())
+            while chunk := file.file.read(1024 * 1024):
+                if f.tell() + len(chunk) > config.MAX_UPLOAD_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File too large (max {config.MAX_UPLOAD_BYTES} bytes)",
+                    )
+                f.write(chunk)
         try:
             transcript = transcription_service.transcribe_file(temp_path)
         except transcription_service.TranscriptionTimeout as exc:

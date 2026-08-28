@@ -36,6 +36,13 @@ TRANSCRIPTION_POLL_INTERVAL_SEC = 2
 TRANSCRIPTION_TIMEOUT_SEC = 120
 REQUEST_TIMEOUT_SEC = 60
 
+MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(100 * 1024 * 1024)))
+ALLOWED_UPLOAD_EXTENSIONS = {
+    ".wav", ".mp3", ".m4a", ".flac", ".ogg", ".opus", ".aac",
+    ".wma", ".amr", ".ape", ".3gp", ".mp4", ".mkv", ".mov",
+    ".webm", ".mpeg", ".wmv",
+}
+
 INTENT_KEYWORDS = {
     "speak_to_agent": ("human", "representative", "real person", "live agent"),
     "password_reset": ("password",),

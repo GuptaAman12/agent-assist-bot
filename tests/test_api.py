@@ -45,6 +45,39 @@ def test_transcribe_timeout_maps_504(client, monkeypatch):
     assert r.status_code == 504
 
 
+def test_transcribe_rejects_unsupported_type(client):
+    r = client.post("/transcribe/", files={"file": ("notes.txt", b"hello", "text/plain")})
+    assert r.status_code == 415
+    assert "Unsupported file type" in r.json()["detail"]
+
+
+def test_transcribe_rejects_oversize_declared(client, monkeypatch):
+    monkeypatch.setattr("app.config.MAX_UPLOAD_BYTES", 50)
+    r = client.post("/transcribe/", files={"file": ("big.wav", b"x" * 100, "audio/wav")})
+    assert r.status_code == 413
+    assert "too large" in r.json()["detail"].lower()
+
+
+def test_transcribe_rejects_oversize_streamed(client, monkeypatch):
+    monkeypatch.setattr("app.config.MAX_UPLOAD_BYTES", 50)
+    # No content-length declared; cap enforced while streaming.
+    r = client.post(
+        "/transcribe/",
+        files={"file": ("big.wav", b"x" * 100, "audio/wav")},
+        headers={"content-length": ""},
+    )
+    assert r.status_code == 413
+
+
+def test_transcribe_accepts_known_audio_type(client, monkeypatch):
+    def fake_transcribe(path):
+        return "some text"
+
+    monkeypatch.setattr("app.main.transcription_service.transcribe_file", fake_transcribe)
+    r = client.post("/transcribe/", files={"file": ("call.mp3", b"fake", "audio/mpeg")})
+    assert r.status_code == 200
+
+
 def test_assist_match_shape(client, monkeypatch):
     monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q: "answer")
     r = client.post("/assist/", json={"transcript": "how do i reset", "intent": "unknown"})
