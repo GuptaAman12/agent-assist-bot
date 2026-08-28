@@ -1,4 +1,6 @@
 import json
+import os
+import time
 
 import pytest
 
@@ -89,6 +91,11 @@ def test_remove_entry_unknown_id(rag_environment):
     assert kb.remove_entry("nope") is False
 
 
+def _bump_mtime(path):
+    future = time.time() + 5
+    os.utime(path, (future, future))
+
+
 def test_reload_if_changed_detects_external_edit(rag_environment):
     kb = rag_environment["kb"]
     model = rag_environment["model"]
@@ -99,6 +106,7 @@ def test_reload_if_changed_detects_external_edit(rag_environment):
     new_entries = json.loads(kb_path.read_text(encoding="utf-8"))
     new_entries.append({"question": "external", "response": "external answer"})
     kb_path.write_text(json.dumps(new_entries), encoding="utf-8")
+    _bump_mtime(kb_path)
 
     model.set_vector("external answer", new_idx, dim)
     assert kb.reload_if_changed() is True
@@ -111,6 +119,7 @@ def test_reload_if_changed_keeps_stale_data_on_broken_file(rag_environment):
     dim = rag_environment["dim"]
     kb_path = rag_environment["kb_path"]
     kb_path.write_text("{ definitely not json", encoding="utf-8")
+    _bump_mtime(kb_path)
 
     assert kb.reload_if_changed() is False
     assert kb.count == 3

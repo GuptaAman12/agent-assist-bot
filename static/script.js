@@ -184,7 +184,7 @@ function showResult(item) {
     els.audioCard.hidden = false;
     els.audioPlayer.src = item.audioUrl;
     els.ttsEngineNote.textContent = item.ttsEngine === 'gtts-fallback'
-      ? 'Voice engine: gTTS fallback (Groq Orpheus unavailable — accept terms at console.groq.com to enable it)'
+      ? 'Voice engine: gTTS fallback (Groq Orpheus unavailable - accept terms at console.groq.com to enable it)'
       : 'Voice engine: Groq Orpheus';
     els.audioPlayer.load();
   } else {
