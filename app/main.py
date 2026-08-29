@@ -14,7 +14,7 @@ from . import config
 from .logging import get_access_logger, set_request_id, setup_logging
 from .services import llm as llm_service
 from .services import transcription as transcription_service
-from .services.intent import detect_intent
+from .services.intent import detect_intent, detect_intents
 from .services.rag import KnowledgeBase
 from .services.tts import synthesize
 
@@ -44,6 +44,8 @@ async def request_context(request: Request, call_next):
     try:
         response = await call_next(request)
         status_code = response.status_code
+        if request.url.path.endswith(".html"):
+            response.headers["Cache-Control"] = "no-store"
         response.headers["X-Request-ID"] = request_id
     except Exception:
         access_logger.exception(
@@ -146,7 +148,9 @@ def assist_agent(request: AssistRequest):
     except llm_service.LLMError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    ai_takeover = request.intent in config.SIMPLE_INTENTS
+    ai_takeover = any(
+        intent in config.SIMPLE_INTENTS for intent in detect_intents(request.transcript)
+    )
 
     audio_url = None
     tts_engine = None

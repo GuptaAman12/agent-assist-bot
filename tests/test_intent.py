@@ -1,4 +1,4 @@
-from app.services.intent import detect_intent
+from app.services.intent import detect_intent, detect_intents
 
 
 def test_known_intents():
@@ -33,3 +33,13 @@ def test_case_insensitive():
 def test_first_match_wins_speak_to_agent():
     # "human" wins over "password" because speak_to_agent is listed first.
     assert detect_intent("I want a human to help with my password") == "speak_to_agent"
+
+
+def test_detect_intents_returns_all():
+    intents = detect_intents("change my email address and the app keeps crashing")
+    assert "update_email" in intents
+    assert "technical_issue" in intents
+
+
+def test_detect_intents_empty_for_gibberish():
+    assert detect_intents("quantum pineapple submarine") == []

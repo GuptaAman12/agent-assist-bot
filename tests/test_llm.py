@@ -44,3 +44,12 @@ def test_malformed_response(monkeypatch):
                         lambda *a, **k: FakeResponse(200, {"unexpected": True}))
     with pytest.raises(LLMError):
         llm.generate_response("ctx", "query")
+
+
+def test_mojibake_normalized(monkeypatch):
+    em_dash_mangled = "\u0393\u00c7\u00e6"
+    payload = {"choices": [{"message": {"content": f"go {em_dash_mangled} stop"}}]}
+    monkeypatch.setattr(llm.requests, "post", lambda *a, **k: FakeResponse(200, payload))
+    out = llm.generate_response("ctx", "query")
+    assert em_dash_mangled not in out
+    assert "go - stop" == out

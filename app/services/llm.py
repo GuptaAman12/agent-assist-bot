@@ -7,6 +7,24 @@ class LLMError(Exception):
     pass
 
 
+# UTF-8 bytes (E2 80 XX) decoded as Latin-1 produce these mojibake sequences.
+_MOJIBAKE_FIXES = {
+    "\u0393\u00c7\u00e6": "-",   # em dash
+    "\u0393\u00c7\u201d": "-",   # em dash variant
+    "\u0393\u00c7\u2019": "'",   # right single quote
+    "\u0393\u00c7\u2018": "'",   # left single quote
+    "\u0393\u00c7\u0153": "\u201c",  # left double quote
+    "\u0393\u00c7\u00a9": "\u201d",  # right double quote
+    "\u0393\u00c7\u00a6": "\u2026",  # ellipsis
+}
+
+
+def _normalize_text(text: str) -> str:
+    for bad, good in _MOJIBAKE_FIXES.items():
+        text = text.replace(bad, good)
+    return text
+
+
 def generate_response(context: str, query: str) -> str:
     headers = {
         "Authorization": f"Bearer {config.GROQ_API_KEY}",
@@ -39,6 +57,7 @@ def generate_response(context: str, query: str) -> str:
         raise LLMError(f"Groq API error {res.status_code}: {res.text[:300]}")
 
     try:
-        return res.json()["choices"][0]["message"]["content"].strip()
+        content = res.json()["choices"][0]["message"]["content"]
+        return _normalize_text(content.strip())
     except (ValueError, KeyError, IndexError) as exc:
         raise LLMError(f"Unexpected Groq response shape: {res.text[:300]}") from exc

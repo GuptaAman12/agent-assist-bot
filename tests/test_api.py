@@ -158,6 +158,23 @@ def test_assist_non_takeover_no_audio(client, monkeypatch):
     assert r.json()["audio_url"] is None
 
 
+def test_assist_mixed_issue_takes_over(client, monkeypatch):
+    # Two issues, both automatable -> AI voice takeover should happen.
+    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q: "answer")
+    monkeypatch.setattr("app.main.synthesize", lambda t: ("out.wav", "groq-orpheus"))
+    r = client.post(
+        "/assist/",
+        json={
+            "transcript": "How do I change my email address? And the app is not working, it keeps crashing.",
+            "intent": "update_email",
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ai_takeover"] is True
+    assert body["audio_url"] == "/static/out.wav"
+
+
 def test_assist_llm_error_maps_502(client, monkeypatch):
     from app.services.llm import LLMError
 

@@ -60,7 +60,7 @@ INTENT_KEYWORDS = {
     "get_invoice": ("invoice", "receipt"),
     "technical_issue": ("not working", "crash", "error message", "won't load"),
 }
-SIMPLE_INTENTS = {"password_reset", "check_balance", "update_address", "track_order", "get_invoice"}
+SIMPLE_INTENTS = {"password_reset", "check_balance", "update_address", "track_order", "get_invoice", "update_email", "technical_issue"}
 UNKNOWN_INTENT = "unknown"
 
 
