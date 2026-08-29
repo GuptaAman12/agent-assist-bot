@@ -3,7 +3,7 @@ import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -129,14 +129,21 @@ class KBEntryRequest(BaseModel):
     response: str
 
 
-@app.get("/kb")
+def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
+    if not config.ADMIN_TOKEN:
+        return
+    if x_admin_token != config.ADMIN_TOKEN:
+        raise HTTPException(status_code=401, detail="Missing or invalid admin token")
+
+
+@app.get("/kb", dependencies=[Depends(require_admin)])
 def kb_list():
     kb: KnowledgeBase = app.state.knowledge_base
     entries = kb.snapshot()
     return {"count": len(entries), "entries": entries}
 
 
-@app.post("/kb")
+@app.post("/kb", dependencies=[Depends(require_admin)])
 def kb_add(entry: KBEntryRequest):
     kb: KnowledgeBase = app.state.knowledge_base
     try:
@@ -146,7 +153,7 @@ def kb_add(entry: KBEntryRequest):
     return created
 
 
-@app.put("/kb/{entry_id}")
+@app.put("/kb/{entry_id}", dependencies=[Depends(require_admin)])
 def kb_update(entry_id: str, entry: KBEntryRequest):
     kb: KnowledgeBase = app.state.knowledge_base
     try:
@@ -158,7 +165,7 @@ def kb_update(entry_id: str, entry: KBEntryRequest):
     return updated
 
 
-@app.delete("/kb/{entry_id}")
+@app.delete("/kb/{entry_id}", dependencies=[Depends(require_admin)])
 def kb_delete(entry_id: str):
     kb: KnowledgeBase = app.state.knowledge_base
     if not kb.remove_entry(entry_id):
@@ -166,7 +173,7 @@ def kb_delete(entry_id: str):
     return {"deleted": entry_id, "count": kb.count}
 
 
-@app.post("/kb/reload")
+@app.post("/kb/reload", dependencies=[Depends(require_admin)])
 def kb_reload():
     kb: KnowledgeBase = app.state.knowledge_base
     kb.reload()

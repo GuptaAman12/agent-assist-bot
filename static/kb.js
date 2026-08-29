@@ -16,9 +16,24 @@ const els = {
 let entries = [];
 let editingId = null;
 
+function adminHeaders() {
+  const token = localStorage.getItem('adminToken');
+  return token ? { 'X-Admin-Token': token } : {};
+}
+
 async function postJson(url, options) {
-  const res = await fetch(url, options);
+  const opts = options || {};
+  opts.headers = { ...adminHeaders(), ...(opts.headers || {}) };
+  const res = await fetch(url, opts);
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401) {
+    const token = prompt('Admin token required to edit the knowledge base:');
+    if (token) {
+      try { localStorage.setItem('adminToken', token); } catch {}
+      return postJson(url, options);
+    }
+    throw new Error('Authorization required. Set ADMIN_TOKEN in .env and provide it here.');
+  }
   if (!res.ok) {
     throw new Error(typeof data.detail === 'string' ? data.detail : `Request failed (${res.status})`);
   }

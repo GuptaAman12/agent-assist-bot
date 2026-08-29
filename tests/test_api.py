@@ -191,3 +191,41 @@ def test_kb_reload(client):
     r = client.post("/kb/reload")
     assert r.status_code == 200
     assert r.json()["reloaded"] is True
+
+
+def test_kb_open_when_no_admin_token(client):
+    r = client.get("/kb")
+    assert r.status_code == 200
+
+
+def test_kb_requires_token_when_configured(client, monkeypatch):
+    monkeypatch.setattr("app.config.ADMIN_TOKEN", "s3cret")
+
+    r = client.get("/kb")
+    assert r.status_code == 401
+
+    r = client.get("/kb", headers={"X-Admin-Token": "wrong"})
+    assert r.status_code == 401
+
+    r = client.get("/kb", headers={"X-Admin-Token": "s3cret"})
+    assert r.status_code == 200
+
+
+def test_kb_mutations_require_token(client, monkeypatch):
+    monkeypatch.setattr("app.config.ADMIN_TOKEN", "s3cret")
+
+    r = client.post("/kb", json={"response": "x"})
+    assert r.status_code == 401
+
+    r = client.post(
+        "/kb",
+        json={"response": "x"},
+        headers={"X-Admin-Token": "s3cret"},
+    )
+    assert r.status_code == 200
+
+    r = client.put("/kb/e1", json={"response": "x"})
+    assert r.status_code == 401
+
+    r = client.delete("/kb/e1")
+    assert r.status_code == 401

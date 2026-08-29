@@ -62,6 +62,7 @@ A real-time customer support system that transcribes live audio, detects user in
    EMBEDDING_MODEL=all-MiniLM-L6-v2      # sentence-transformers model
    KB_MIN_SIMILARITY=0.45                # below this, /assist/ answers "I'm not sure"
    MAX_UPLOAD_BYTES=104857600            # max /transcribe/ upload size (100 MB)
+   ADMIN_TOKEN=change-me                 # if set, /kb/* requires this as X-Admin-Token
    GROQ_TTS_MODEL=canopylabs/orpheus-v1-english
    GROQ_TTS_VOICE=troy                   # autumn/diana/hannah/austin/daniel/troy
    ```
@@ -141,6 +142,8 @@ knowledge_base.json        # RAG corpus
 `audio_url` is set only when `ai_takeover` is true (the response is spoken). Errors return a JSON `{"detail": "..."}` with an appropriate status code (502 for upstream API failures, 504 for transcription timeouts). KB entries can also be edited by modifying `knowledge_base.json` directly - the server detects the change and re-embeds on the next request.
 
 `POST /transcribe/` enforces upload guards before any external API call: unsupported file extensions return **415** (audio/video allowlist matching AssemblyAI's formats), and files over `MAX_UPLOAD_BYTES` (default 100 MB) return **413**.
+
+**Admin auth:** if `ADMIN_TOKEN` is set in `.env`, every `/kb/*` endpoint requires it as the `X-Admin-Token` header (401 otherwise). When it is empty (local dev), the KB endpoints stay open. The KB manager page stores your token in the browser and prompts for it on a 401.
 
 ### Test without a microphone
 
