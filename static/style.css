@@ -172,10 +172,16 @@ a { color: var(--accent); }
 
 .results {
   display: grid;
-  gap: 16px;
+  gap: 24px;
   min-width: 0;
   align-content: start;
   overflow: hidden;
+}
+
+#result-panel {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
 }
 
 /* Cards */
