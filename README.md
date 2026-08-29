@@ -145,6 +145,18 @@ knowledge_base.json        # RAG corpus
 
 **Admin auth:** if `ADMIN_TOKEN` is set in `.env`, every `/kb/*` endpoint requires it as the `X-Admin-Token` header (401 otherwise). When it is empty (local dev), the KB endpoints stay open. The KB manager page stores your token in the browser and prompts for it on a 401.
 
+## 📝 Logging
+
+Logs are structured JSON lines on stdout. Every request produces a `request completed` line (and `request failed` on errors) carrying a `req_id`, and the same ID is echoed back on the response as the `X-Request-ID` header, so a bad request is traceable end to end:
+
+```
+{"ts": "...", "level": "INFO", "logger": "app.access", "message": "request completed",
+ "req_id": "8d93452cdd5e", "req_method": "GET", "req_path": "/health",
+ "req_status": 200, "req_duration_ms": 0.52}
+```
+
+Any code can read the current request ID via `app.logging.get_request_id()`.
+
 ### Test without a microphone
 
 ```bash

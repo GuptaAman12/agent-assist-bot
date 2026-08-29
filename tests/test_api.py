@@ -9,6 +9,31 @@ def test_health(client):
     assert r.json() == {"status": "ok"}
 
 
+def test_request_id_header_present(client):
+    r = client.get("/health")
+    assert r.headers.get("X-Request-ID")
+
+
+def test_request_ids_unique_per_request(client):
+    first = client.get("/health").headers["X-Request-ID"]
+    second = client.get("/health").headers["X-Request-ID"]
+    assert first and second and first != second
+
+
+def test_structured_log_includes_request_id(client, caplog):
+    import logging
+
+    from app.logging import get_access_logger
+
+    with caplog.at_level(logging.INFO, logger=get_access_logger().name):
+        client.get("/health")
+
+    matched = [rec for rec in caplog.records if rec.getMessage() == "request completed"]
+    assert matched
+    assert all(getattr(rec, "req_id", None) for rec in matched)
+    assert all(getattr(rec, "req_status", None) == 200 for rec in matched)
+
+
 def test_root_redirects(client):
     r = client.get("/", follow_redirects=False)
     assert r.status_code in (301, 307)

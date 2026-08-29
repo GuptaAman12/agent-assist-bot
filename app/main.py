@@ -1,19 +1,25 @@
 import os
 import tempfile
+import time
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import config
+from .logging import get_access_logger, set_request_id, setup_logging
 from .services import llm as llm_service
 from .services import transcription as transcription_service
 from .services.intent import detect_intent
 from .services.rag import KnowledgeBase
 from .services.tts import synthesize
+
+setup_logging()
+access_logger = get_access_logger()
 
 
 @asynccontextmanager
@@ -27,6 +33,41 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Agent Assist & Resolution Bot", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static")
+
+
+@app.middleware("http")
+async def request_context(request: Request, call_next):
+    request_id = uuid.uuid4().hex[:12]
+    set_request_id(request_id)
+    start = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        response.headers["X-Request-ID"] = request_id
+    except Exception:
+        access_logger.exception(
+            "request failed",
+            extra={
+                "req_id": request_id,
+                "req_method": request.method,
+                "req_path": request.url.path,
+            },
+        )
+        raise
+    finally:
+        duration_ms = round((time.perf_counter() - start) * 1000, 2)
+        access_logger.info(
+            "request completed",
+            extra={
+                "req_id": request_id,
+                "req_method": request.method,
+                "req_path": request.url.path,
+                "req_status": status_code,
+                "req_duration_ms": duration_ms,
+            },
+        )
+    return response
 
 
 @app.get("/")
