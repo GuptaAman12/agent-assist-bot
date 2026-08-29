@@ -59,6 +59,7 @@
     "question": "The app is not working or keeps crashing.",
     "response": "First force-close and reopen the app, then check for updates in your app store. If it still crashes, clear the app cache from device settings or reinstall the app."
   },
+  
   {
     "question": "What are your business hours?",
     "response": "Automated support is available 24/7. Live agents are available Monday to Friday, 9 AM to 6 PM in your local time zone, and Saturday, 10 AM to 2 PM."
