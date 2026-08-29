@@ -10,6 +10,7 @@ A real-time customer support system that transcribes live audio, detects user in
 - 🎯 Intent detection from the transcript (password reset, refunds, order tracking…).
 - 🧠 Context-aware RAG using `sentence-transformers` - knowledge-base embeddings are computed once at startup.
 - 🎚️ **Retrieval confidence threshold** - queries that don't match the knowledge base (cosine similarity below `KB_MIN_SIMILARITY`) get an honest "I'm not sure" instead of a confidently wrong answer, and skip the LLM call entirely.
+- 🧩 **Multi-topic retrieval** - mixed recordings pull the top matching KB entries (`sources` array) so every issue in a single call is answered from the knowledge base, not invented.
 - 📝 **Hot-reloadable knowledge base** - add, edit, and remove entries from a dedicated manager page, or edit `knowledge_base.json` directly; changes apply without restarting (invalid edits keep serving the last good state).
 - 💬 Answer generation using **Groq** (`openai/gpt-oss-120b` by default).
 - 🤖 AI takeover: simple intents are answered aloud by a realistic neural voice (**Groq Orpheus**), with automatic gTTS fallback.
@@ -131,7 +132,7 @@ knowledge_base.json        # RAG corpus
 | Endpoint             | Body                        | Returns                                                      |
 |----------------------|-----------------------------|--------------------------------------------------------------|
 | `POST /transcribe/`  | multipart `.wav` upload     | `{transcript, intent}`                                       |
-| `POST /assist/`      | `{transcript, intent}` JSON | `{response, ai_takeover, source, audio_url, tts_engine}`     |
+| `POST /assist/`      | `{transcript, intent}` JSON | `{response, ai_takeover, source, sources, audio_url, tts_engine, kb_score}` |
 | `GET /health`        | –                           | `{"status": "ok"}`                                           |
 | `GET /kb`            | –                           | `{count, entries: [{id, question, response}]}`               |
 | `POST /kb`           | `{question?, response}`     | created entry                                                |

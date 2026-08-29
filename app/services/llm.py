@@ -16,11 +16,13 @@ def generate_response(context: str, query: str) -> str:
         "model": config.GROQ_MODEL,
         "messages": [
             {"role": "system", "content": (
-                "You are a helpful support assistant. Answer concisely in plain prose or short numbered steps. "
+                "You are a helpful support assistant. Base your answer ONLY on the provided context. "
+                "If the context lacks the information for any part of the user's query, say you are not sure about that part. "
+                "Answer concisely in plain prose or short numbered steps. "
                 "Do not use markdown tables, headings, or code blocks; responses may be spoken aloud. "
                 "Use **bold** sparingly for key actions."
             )},
-            {"role": "user", "content": f"Context: {context}\n\nQuery: {query}"},
+            {"role": "user", "content": f"Context:\n{context}\n\nQuery: {query}"},
         ],
     }
     try:

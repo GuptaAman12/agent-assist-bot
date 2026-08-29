@@ -103,15 +103,27 @@ class KnowledgeBase:
         self.reload()
         return True
 
-    def best_match(self, query: str) -> tuple[str | None, float]:
+    def best_matches(self, query: str, k: int = 3) -> list[tuple[str, float]]:
         self.reload_if_changed()
         query_embedding = self._model.encode(query, convert_to_tensor=True)
         scores = util.pytorch_cos_sim(query_embedding, self._corpus_embeddings)[0]
-        top_score = scores.max().item()
-        if top_score < config.KB_MIN_SIMILARITY:
-            return None, top_score
-        top_idx = scores.argmax().item()
-        return self._entries[top_idx]["response"], top_score
+        order = sorted(range(scores.numel()), key=lambda i: scores[i].item(), reverse=True)
+        matches = []
+        for idx in order:
+            score = scores[idx].item()
+            if score < config.KB_MIN_SIMILARITY:
+                break
+            matches.append((self._entries[idx]["response"], round(float(score), 4)))
+            if len(matches) >= k:
+                break
+        return matches
+
+    def best_match(self, query: str) -> tuple[str | None, float]:
+        matches = self.best_matches(query, k=1)
+        if not matches:
+            return None, 0.0
+        text, score = matches[0]
+        return text, score
 
     def _touch_mtime(self) -> None:
         try:

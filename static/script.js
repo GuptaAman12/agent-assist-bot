@@ -22,7 +22,9 @@ const els = {
   timestamp: document.getElementById('timestamp'),
   response: document.getElementById('response'),
   copyBtn: document.getElementById('copy-btn'),
-  sourceText: document.getElementById('source-text'),
+  sourceCard: document.getElementById('source-card'),
+  sourcesList: document.getElementById('sources-list'),
+  kbConfidence: document.getElementById('kb-confidence'),
   audioCard: document.getElementById('audio-card'),
   audioPlayer: document.getElementById('audio-player'),
   ttsEngineNote: document.getElementById('tts-engine-note'),
@@ -177,8 +179,32 @@ function showResult(item) {
   els.takeoverPill.className = 'takeover-pill ' + (item.aiTakeover ? 'takeover-yes' : 'takeover-no');
   els.timestamp.textContent = new Date(item.at).toLocaleString();
   els.response.innerHTML = item.responseHtml;
-  els.sourceText.textContent = item.source || '';
-  document.getElementById('source-card').hidden = !item.source;
+
+  if (item.sources && item.sources.length) {
+    els.sourceCard.hidden = false;
+    els.sourcesList.innerHTML = '';
+    item.sources.forEach((src, i) => {
+      const li = document.createElement('li');
+      li.className = 'source-item';
+      const idx = document.createElement('span');
+      idx.className = 'source-index';
+      idx.textContent = String(i + 1).padStart(2, '0');
+      const text = document.createElement('span');
+      text.className = 'source-text';
+      text.textContent = src;
+      li.append(idx, text);
+      els.sourcesList.appendChild(li);
+    });
+  } else {
+    els.sourceCard.hidden = true;
+  }
+
+  if (typeof item.kbScore === 'number') {
+    els.kbConfidence.textContent = `Match ${(item.kbScore * 100).toFixed(0)}%`;
+    els.kbConfidence.hidden = false;
+  } else {
+    els.kbConfidence.hidden = true;
+  }
 
   if (item.audioUrl) {
     els.audioCard.hidden = false;
@@ -277,7 +303,7 @@ els.form.addEventListener('submit', async e => {
 
   const file = els.fileInput.files[0];
   if (!file) {
-    showError('Please choose a .wav file first.');
+    showError('Please choose an audio file first.');
     return;
   }
 
@@ -306,7 +332,8 @@ els.form.addEventListener('submit', async e => {
       aiTakeover: assist.ai_takeover,
       responseRaw: assist.response,
       responseHtml: renderMarkdown(assist.response),
-      source: assist.source || '',
+      sources: Array.isArray(assist.sources) ? assist.sources : (assist.source ? [assist.source] : []),
+      kbScore: assist.kb_score,
       audioUrl: assist.audio_url || null,
       ttsEngine: assist.tts_engine || null
     };

@@ -34,6 +34,29 @@ def test_best_match_below_threshold_returns_none(rag_environment):
     assert score < 0.45
 
 
+def test_best_matches_returns_multiple_above_threshold(rag_environment):
+    kb = rag_environment["kb"]
+    model = rag_environment["model"]
+    dim = rag_environment["dim"]
+    # Superposition query: matches both entry 0 and entry 1 (cos sim ~0.707 each).
+    model._vectors["query touching two topics"] = [1.0, 1.0] + [0.0] * (dim - 2)
+    matches = kb.best_matches("query touching two topics", k=3)
+    assert len(matches) == 2
+    assert matches[0][0] == "go to login page"
+    assert matches[1][0] == "check your dashboard"
+    assert all(score >= 0.45 for _, score in matches)
+
+
+def test_best_matches_respects_k(rag_environment):
+    kb = rag_environment["kb"]
+    model = rag_environment["model"]
+    dim = rag_environment["dim"]
+    model._vectors["query touching two topics"] = [1.0, 1.0] + [0.0] * (dim - 2)
+    matches = kb.best_matches("query touching two topics", k=1)
+    assert len(matches) == 1
+    assert matches[0][0] == "go to login page"
+
+
 def test_add_entry_persists_and_embeds(rag_environment):
     kb = rag_environment["kb"]
     model = rag_environment["model"]

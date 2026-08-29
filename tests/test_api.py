@@ -111,13 +111,14 @@ def test_assist_match_shape(client, monkeypatch):
     assert body["response"] == "answer"
     assert body["ai_takeover"] is False
     assert body["source"] == "context one"
+    assert body["sources"] == ["context one", "context two"]
     assert body["kb_score"] == 0.8
     assert body["audio_url"] is None
     assert body["tts_engine"] is None
 
 
 def test_assist_no_match(client, monkeypatch):
-    client.app.state.knowledge_base.match_result = (None, 0.12)
+    client.app.state.knowledge_base.matches_result = []
 
     called = {"llm": False}
 
@@ -130,8 +131,9 @@ def test_assist_no_match(client, monkeypatch):
     assert r.status_code == 200
     body = r.json()
     assert body["source"] is None
+    assert body["sources"] == []
     assert body["ai_takeover"] is False
-    assert body["kb_score"] == 0.12
+    assert body["kb_score"] is None
     assert body["tts_engine"] is None
     assert "not sure" in body["response"].lower()
     assert not called["llm"]

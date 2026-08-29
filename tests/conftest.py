@@ -51,6 +51,7 @@ class FakeKnowledgeBase:
             {"id": "e2", "question": "check balance", "response": "context two"},
         ]
         self.match_result = ("context one", 0.8)
+        self.matches_result = [("context one", 0.8), ("context two", 0.6)]
         self._next_id = 100
 
     @property
@@ -61,7 +62,14 @@ class FakeKnowledgeBase:
         return [dict(e) for e in self._entries]
 
     def best_match(self, query):
-        return self.match_result
+        matches = self.best_matches(query, k=1)
+        if not matches:
+            return None, 0.0
+        text, score = matches[0]
+        return text, score
+
+    def best_matches(self, query, k=3):
+        return self.matches_result[:k]
 
     def add_entry(self, question, response):
         if not response.strip():

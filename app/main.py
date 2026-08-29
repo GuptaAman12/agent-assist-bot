@@ -125,20 +125,24 @@ def transcribe(file: UploadFile = File(...)):
 @app.post("/assist/")
 def assist_agent(request: AssistRequest):
     kb: KnowledgeBase = app.state.knowledge_base
-    source, score = kb.best_match(request.transcript)
+    matches = kb.best_matches(request.transcript)
 
-    if source is None:
+    if not matches:
         return {
             "response": config.KB_NO_MATCH_RESPONSE,
             "ai_takeover": False,
             "source": None,
+            "sources": [],
             "audio_url": None,
             "tts_engine": None,
-            "kb_score": round(score, 4),
+            "kb_score": None,
         }
 
+    sources = [text for text, _ in matches]
+    context = "\n".join(f"[{i + 1}] {text}" for i, text in enumerate(sources))
+
     try:
-        response_text = llm_service.generate_response(source, request.transcript)
+        response_text = llm_service.generate_response(context, request.transcript)
     except llm_service.LLMError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -153,10 +157,11 @@ def assist_agent(request: AssistRequest):
     return {
         "response": response_text,
         "ai_takeover": ai_takeover,
-        "source": source,
+        "source": sources[0],
+        "sources": sources,
         "audio_url": audio_url,
         "tts_engine": tts_engine,
-        "kb_score": round(score, 4),
+        "kb_score": matches[0][1],
     }
 
 
