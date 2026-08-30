@@ -294,13 +294,39 @@ def test_kb_login_sets_cookie_and_serves_page(client, monkeypatch):
     assert r.status_code == 303
     assert "admin_token" in r.headers["set-cookie"]
 
-    cookie = client.cookies
     r = client.get("/static/kb.html")
     assert r.status_code == 200
     assert "kb-add-form" in r.text
 
     r = client.get("/kb")
     assert r.status_code == 200
+
+
+def test_kb_session_invalidated_on_restart(client, monkeypatch):
+    monkeypatch.setattr("app.config.ADMIN_TOKEN", "s3cret")
+    from app.main import ADMIN_SESSIONS
+
+    client.post("/kb-admin/login", data={"token": "s3cret"})
+    assert client.get("/kb").status_code == 200
+
+    # Simulate an app restart: server-side sessions are wiped.
+    ADMIN_SESSIONS.clear()
+
+    r = client.get("/kb")
+    assert r.status_code == 401
+    assert "Knowledge base login" in client.get("/static/kb.html").text
+
+
+def test_kb_logout_revokes_session(client, monkeypatch):
+    monkeypatch.setattr("app.config.ADMIN_TOKEN", "s3cret")
+    from app.main import ADMIN_SESSIONS
+
+    client.post("/kb-admin/login", data={"token": "s3cret"})
+    assert client.get("/kb").status_code == 200
+
+    client.post("/kb-admin/logout", follow_redirects=False)
+    assert ADMIN_SESSIONS == {}
+    assert client.get("/kb").status_code == 401
 
 
 def test_kb_page_open_when_no_admin_token(client):

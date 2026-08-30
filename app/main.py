@@ -1,4 +1,5 @@
 import os
+import secrets
 import tempfile
 import time
 import uuid
@@ -20,6 +21,10 @@ from .services.tts import synthesize
 
 setup_logging()
 access_logger = get_access_logger()
+
+# Server-side admin sessions: browser holds an opaque session id; restarting
+# the app clears this dict, which logs every admin out (no session survives a restart).
+ADMIN_SESSIONS: dict[str, str] = {}
 
 
 @asynccontextmanager
@@ -77,7 +82,8 @@ def _has_admin_access(request: Request) -> bool:
         return True
     if request.headers.get("X-Admin-Token") == config.ADMIN_TOKEN:
         return True
-    return request.cookies.get(config.ADMIN_COOKIE_NAME) == config.ADMIN_TOKEN
+    session_id = request.cookies.get(config.ADMIN_COOKIE_NAME)
+    return session_id in ADMIN_SESSIONS and ADMIN_SESSIONS[session_id] == config.ADMIN_TOKEN
 
 
 @app.middleware("http")
@@ -123,10 +129,12 @@ def kb_admin_login(token: str = Form(...)):
         return RedirectResponse("/static/kb.html", status_code=303)
     if token != config.ADMIN_TOKEN:
         return HTMLResponse(_login_page(error="Invalid admin token"), status_code=401)
+    session_id = secrets.token_urlsafe(24)
+    ADMIN_SESSIONS[session_id] = config.ADMIN_TOKEN
     response = RedirectResponse("/static/kb.html", status_code=303)
     response.set_cookie(
         config.ADMIN_COOKIE_NAME,
-        config.ADMIN_TOKEN,
+        session_id,
         httponly=True,
         samesite="lax",
         max_age=7 * 24 * 3600,
@@ -136,7 +144,10 @@ def kb_admin_login(token: str = Form(...)):
 
 
 @app.post("/kb-admin/logout")
-def kb_admin_logout():
+def kb_admin_logout(request: Request):
+    session_id = request.cookies.get(config.ADMIN_COOKIE_NAME)
+    if session_id:
+        ADMIN_SESSIONS.pop(session_id, None)
     response = RedirectResponse("/static/kb.html", status_code=303)
     response.delete_cookie(config.ADMIN_COOKIE_NAME, path="/")
     return response
@@ -254,7 +265,8 @@ def require_admin(request: Request, x_admin_token: str | None = Header(default=N
         return
     if x_admin_token == config.ADMIN_TOKEN:
         return
-    if request.cookies.get(config.ADMIN_COOKIE_NAME) == config.ADMIN_TOKEN:
+    session_id = request.cookies.get(config.ADMIN_COOKIE_NAME)
+    if session_id in ADMIN_SESSIONS and ADMIN_SESSIONS[session_id] == config.ADMIN_TOKEN:
         return
     raise HTTPException(status_code=401, detail="Missing or invalid admin token")
 

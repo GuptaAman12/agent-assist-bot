@@ -2,6 +2,9 @@ import os
 
 os.environ.setdefault("ASSEMBLYAI_API_KEY", "test-assembly-key")
 os.environ.setdefault("GROQ_API_KEY", "test-groq-key")
+# Keep /kb auth OFF in tests regardless of the developer's .env; the auth
+# tests set app.config.ADMIN_TOKEN explicitly.
+os.environ.setdefault("ADMIN_TOKEN", "")
 
 import json
 import tempfile
