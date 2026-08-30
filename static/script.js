@@ -228,6 +228,8 @@ function showResult(item) {
     els.audioCard.hidden = true;
     els.audioPlayer.removeAttribute('src');
   }
+
+  saveSessionState();
 }
 
 els.copyBtn.addEventListener('click', async () => {
@@ -266,11 +268,35 @@ function renderHistory() {
   });
 }
 
+function saveSessionState() {
+  try {
+    sessionStorage.setItem('dashboard_state', JSON.stringify({ history, activeIndex }));
+  } catch {}
+}
+
 function pushHistory(item) {
   history.unshift(item);
   if (history.length > 12) history.pop();
   els.historyCard.hidden = false;
   renderHistory();
+  saveSessionState();
+}
+
+function restoreSessionState() {
+  let raw = null;
+  try { raw = sessionStorage.getItem('dashboard_state'); } catch {}
+  if (!raw) return;
+  try {
+    const saved = JSON.parse(raw);
+    if (!Array.isArray(saved.history) || !saved.history.length) return;
+    history = saved.history;
+    activeIndex = typeof saved.activeIndex === 'number' ? saved.activeIndex : 0;
+    if (activeIndex >= history.length) activeIndex = 0;
+    current = history[activeIndex];
+    els.historyCard.hidden = false;
+    renderHistory();
+    if (current) showResult(current);
+  } catch {}
 }
 
 els.historyClear.addEventListener('click', () => {
@@ -280,6 +306,7 @@ els.historyClear.addEventListener('click', () => {
   els.historyCard.hidden = true;
   els.resultPanel.hidden = true;
   els.emptyState.hidden = false;
+  try { sessionStorage.removeItem('dashboard_state'); } catch {}
 });
 
 els.dropzone.addEventListener('click', () => els.fileInput.click());
@@ -376,6 +403,7 @@ els.themeToggle.addEventListener('click', () => {
 
 checkHealth();
 syncThemeIcon();
+restoreSessionState();
 
 /* Live microphone recording */
 
