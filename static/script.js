@@ -403,6 +403,54 @@ function stopMediaTracks() {
   }
 }
 
+function writeString(view, offset, str) {
+  for (let i = 0; i < str.length; i++) {
+    view.setUint8(offset + i, str.charCodeAt(i));
+  }
+}
+
+async function blobToWavFile(blob) {
+  const arrayBuffer = await blob.arrayBuffer();
+  const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  const ctx = new Ctx(1, 1, 44100);
+  const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+  const numCh = audioBuffer.numberOfChannels;
+  const sampleRate = audioBuffer.sampleRate;
+  const numFrames = audioBuffer.length;
+  const bytesPerSample = 2;
+  const blockAlign = numCh * bytesPerSample;
+  const dataSize = numFrames * blockAlign;
+
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(view, 8, 'WAVE');
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numCh, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bytesPerSample * 8, true);
+  writeString(view, 36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  const channels = [];
+  for (let c = 0; c < numCh; c++) channels.push(audioBuffer.getChannelData(c));
+  let offset = 44;
+  for (let i = 0; i < numFrames; i++) {
+    for (let c = 0; c < numCh; c++) {
+      const s = Math.max(-1, Math.min(1, channels[c][i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+      offset += 2;
+    }
+  }
+  return new File([buffer], 'recording.wav', { type: 'audio/wav' });
+}
+
 function finishRecording() {
   stopMediaTracks();
   setRecordingUI(false);
@@ -410,15 +458,26 @@ function finishRecording() {
     showError('Recording was empty. Try again or upload a file instead.');
     return;
   }
-  const type = (mediaRecorder.mimeType || 'audio/webm').split(';')[0];
-  const ext = type === 'audio/mp4' ? 'mp4' : 'webm';
-  const blob = new Blob(mediaChunks, { type });
-  const file = new File([blob], `recording.${ext}`, { type });
-  const dt = new DataTransfer();
-  dt.items.add(file);
-  els.fileInput.files = dt.files;
+  const rawType = (mediaRecorder.mimeType || 'audio/webm').split(';')[0];
+  const rawBlob = new Blob(mediaChunks, { type: rawType });
   mediaChunks = [];
-  updateFileChip();
+
+  blobToWavFile(rawBlob)
+    .then(file => {
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      els.fileInput.files = dt.files;
+      updateFileChip();
+    })
+    .catch(() => {
+      // Couldn't decode/re-encode (e.g. Safari mp4) - fall back to the raw blob.
+      const ext = rawType === 'audio/mp4' ? 'mp4' : 'webm';
+      const file = new File([rawBlob], `recording.${ext}`, { type: rawType });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      els.fileInput.files = dt.files;
+      updateFileChip();
+    });
 }
 
 async function startRecording() {
