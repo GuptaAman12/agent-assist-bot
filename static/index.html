@@ -12,7 +12,7 @@
       document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     })();
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=16">
+  <link rel="stylesheet" href="/static/style.css?v=17">
 </head>
 <body>
   <header class="topbar">
@@ -54,6 +54,16 @@
             <span id="submit-spinner" class="spinner" hidden></span>
           </button>
         </form>
+        <div class="record-divider"><span>or</span></div>
+        <button type="button" id="record-btn" class="btn-ghost record-btn" title="Record audio from your microphone" hidden>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" y1="18" x2="12" y2="22"/></svg>
+          <span id="record-label">Record live audio</span>
+        </button>
+        <div id="recording-bar" class="recording-bar" hidden>
+          <span class="recording-dot" aria-hidden="true"></span>
+          <span id="record-timer" class="record-timer">0:00</span>
+          <button type="button" id="record-stop-btn" class="btn-ghost btn-small">Stop</button>
+        </div>
         <div id="error" class="error-banner" hidden></div>
         <div id="stage-note" class="stage-note" hidden></div>
       </section>
@@ -108,6 +118,6 @@
     </section>
   </main>
 
-  <script src="/static/script.js?v=14"></script>
+  <script src="/static/script.js?v=17"></script>
 </body>
 </html>

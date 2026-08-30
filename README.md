@@ -7,6 +7,7 @@ A real-time customer support system that transcribes live audio, detects user in
 ## 🧩 Features
 
 - 🔊 Upload `.wav` audio (or drag & drop) → instant transcript via AssemblyAI.
+- 🎙️ **Record live from the microphone** right in the dashboard (MediaRecorder) - no file needed; the recording becomes the upload.
 - 🎯 Intent detection from the transcript (password reset, refunds, order tracking…).
 - 🧠 Context-aware RAG using `sentence-transformers` - knowledge-base embeddings are computed once at startup.
 - 🎚️ **Retrieval confidence threshold** - queries that don't match the knowledge base (cosine similarity below `KB_MIN_SIMILARITY`) get an honest "I'm not sure" instead of a confidently wrong answer, and skip the LLM call entirely.

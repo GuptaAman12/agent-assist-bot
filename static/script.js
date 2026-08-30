@@ -30,12 +30,23 @@ const els = {
   ttsEngineNote: document.getElementById('tts-engine-note'),
   historyCard: document.getElementById('history-card'),
   historyList: document.getElementById('history-list'),
-  historyClear: document.getElementById('history-clear')
+  historyClear: document.getElementById('history-clear'),
+  recordBtn: document.getElementById('record-btn'),
+  recordLabel: document.getElementById('record-label'),
+  recordingBar: document.getElementById('recording-bar'),
+  recordTimer: document.getElementById('record-timer'),
+  recordStopBtn: document.getElementById('record-stop-btn')
 };
 
 let history = [];
 let activeIndex = -1;
 let current = null;
+
+let mediaRecorder = null;
+let mediaStream = null;
+let mediaChunks = [];
+let recordStartTime = 0;
+let recordTimerId = null;
 
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, c => ({
@@ -365,3 +376,100 @@ els.themeToggle.addEventListener('click', () => {
 
 checkHealth();
 syncThemeIcon();
+
+/* Live microphone recording */
+
+function formatRecordTime(ms) {
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function setRecordingUI(recording) {
+  els.recordBtn.hidden = recording;
+  els.recordingBar.hidden = !recording;
+  els.recordStopBtn.disabled = !recording;
+  if (!recording) {
+    els.recordTimer.textContent = '0:00';
+    if (recordTimerId) { clearInterval(recordTimerId); recordTimerId = null; }
+  }
+}
+
+function stopMediaTracks() {
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(t => t.stop());
+    mediaStream = null;
+  }
+}
+
+function finishRecording() {
+  stopMediaTracks();
+  setRecordingUI(false);
+  if (!mediaChunks.length) {
+    showError('Recording was empty. Try again or upload a file instead.');
+    return;
+  }
+  const type = (mediaRecorder.mimeType || 'audio/webm').split(';')[0];
+  const ext = type === 'audio/mp4' ? 'mp4' : 'webm';
+  const blob = new Blob(mediaChunks, { type });
+  const file = new File([blob], `recording.${ext}`, { type });
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  els.fileInput.files = dt.files;
+  mediaChunks = [];
+  updateFileChip();
+}
+
+async function startRecording() {
+  clearError();
+  if (!navigator.mediaDevices || !window.MediaRecorder) {
+    showError('Recording is not supported in this browser. Upload a file instead.');
+    return;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    showError('Microphone access denied. Allow mic permission, or upload a file instead.');
+    return;
+  }
+  mediaStream = stream;
+  mediaChunks = [];
+  const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+    .find(t => MediaRecorder.isTypeSupported(t));
+  mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  mediaRecorder.ondataavailable = e => { if (e.data && e.data.size) mediaChunks.push(e.data); };
+  mediaRecorder.onstop = finishRecording;
+  mediaRecorder.onerror = () => {
+    stopMediaTracks();
+    setRecordingUI(false);
+    showError('Recording failed. Try again or upload a file instead.');
+  };
+  mediaRecorder.start();
+  recordStartTime = Date.now();
+  els.recordTimer.textContent = '0:00';
+  recordTimerId = setInterval(() => {
+    els.recordTimer.textContent = formatRecordTime(Date.now() - recordStartTime);
+  }, 500);
+  setRecordingUI(true);
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  } else {
+    stopMediaTracks();
+    setRecordingUI(false);
+  }
+}
+
+els.recordBtn.addEventListener('click', startRecording);
+els.recordStopBtn.addEventListener('click', stopRecording);
+
+if (!(navigator.mediaDevices && window.MediaRecorder)) {
+  els.recordBtn.hidden = true;
+  els.recordLabel.textContent = 'Recording not supported';
+} else {
+  els.recordBtn.hidden = false;
+}

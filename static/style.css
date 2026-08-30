@@ -301,6 +301,68 @@ a { color: var(--accent); }
   padding: 5px 12px;
 }
 
+/* Live mic recording */
+
+.record-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 10px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.record-divider::before,
+.record-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.record-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  justify-content: center;
+  padding: 9px 12px;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.record-btn:hover { background: var(--accent-soft); color: var(--accent-strong); }
+
+.recording-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  color: var(--danger);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.recording-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: pulse 1.1s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .35; transform: scale(.75); }
+}
+.record-timer {
+  flex: 1;
+  font-variant-numeric: tabular-nums;
+  font-family: Consolas, monospace;
+  font-size: 14px;
+}
+
 .spinner {
   width: 15px;
   height: 15px;
