@@ -11,6 +11,7 @@ load_dotenv(BASE_DIR / ".env")
 ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
+ADMIN_COOKIE_NAME = "admin_token"
 
 GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
 EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")

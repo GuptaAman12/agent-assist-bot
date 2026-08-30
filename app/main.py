@@ -5,8 +5,8 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -69,6 +69,76 @@ async def request_context(request: Request, call_next):
                 "req_duration_ms": duration_ms,
             },
         )
+    return response
+
+
+def _has_admin_access(request: Request) -> bool:
+    if not config.ADMIN_TOKEN:
+        return True
+    if request.headers.get("X-Admin-Token") == config.ADMIN_TOKEN:
+        return True
+    return request.cookies.get(config.ADMIN_COOKIE_NAME) == config.ADMIN_TOKEN
+
+
+@app.middleware("http")
+async def guard_kb_page(request: Request, call_next):
+    if request.url.path == "/static/kb.html" and not _has_admin_access(request):
+        return HTMLResponse(_login_page())
+    return await call_next(request)
+
+
+def _login_page(error: str | None = None) -> str:
+    error_html = (
+        f'<p class="error-banner" style="margin-top:14px">{error}</p>' if error else ""
+    )
+    return f"""<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Login</title>
+<link rel="stylesheet" href="/static/style.css">
+<script>(function(){{var t=null;try{{t=localStorage.getItem('theme')}}catch(e){{}}var d=t==='dark'||(!t&&window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.setAttribute('data-theme',d?'dark':'light')}})();</script>
+</head>
+<body>
+<header class="topbar"><div class="brand"><span class="brand-mark">K</span><span class="brand-name">Agent Assist</span><span class="brand-tag">Admin</span></div></header>
+<main style="max-width:380px;margin:80px auto;padding:0 18px;">
+  <section class="card">
+    <h2 class="card-title">Knowledge base login</h2>
+    <p class="kb-hint">Enter the ADMIN_TOKEN to manage the knowledge base.</p>
+    <form method="post" action="/kb-admin/login">
+      <input type="password" name="token" placeholder="ADMIN_TOKEN" autocomplete="current-password" required style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);color:var(--text);font-size:14px;"/>
+      <button type="submit" class="btn-primary" style="margin-top:12px;">Sign in</button>
+    </form>
+    {error_html}
+  </section>
+</main>
+</body>
+</html>"""
+
+
+@app.post("/kb-admin/login")
+def kb_admin_login(token: str = Form(...)):
+    if not config.ADMIN_TOKEN:
+        return RedirectResponse("/static/kb.html", status_code=303)
+    if token != config.ADMIN_TOKEN:
+        return HTMLResponse(_login_page(error="Invalid admin token"), status_code=401)
+    response = RedirectResponse("/static/kb.html", status_code=303)
+    response.set_cookie(
+        config.ADMIN_COOKIE_NAME,
+        config.ADMIN_TOKEN,
+        httponly=True,
+        samesite="lax",
+        max_age=7 * 24 * 3600,
+        path="/",
+    )
+    return response
+
+
+@app.post("/kb-admin/logout")
+def kb_admin_logout():
+    response = RedirectResponse("/static/kb.html", status_code=303)
+    response.delete_cookie(config.ADMIN_COOKIE_NAME, path="/")
     return response
 
 
@@ -179,11 +249,14 @@ class KBEntryRequest(BaseModel):
     response: str
 
 
-def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
+def require_admin(request: Request, x_admin_token: str | None = Header(default=None)) -> None:
     if not config.ADMIN_TOKEN:
         return
-    if x_admin_token != config.ADMIN_TOKEN:
-        raise HTTPException(status_code=401, detail="Missing or invalid admin token")
+    if x_admin_token == config.ADMIN_TOKEN:
+        return
+    if request.cookies.get(config.ADMIN_COOKIE_NAME) == config.ADMIN_TOKEN:
+        return
+    raise HTTPException(status_code=401, detail="Missing or invalid admin token")
 
 
 @app.get("/kb", dependencies=[Depends(require_admin)])

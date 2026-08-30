@@ -144,7 +144,10 @@ knowledge_base.json        # RAG corpus
 
 `POST /transcribe/` enforces upload guards before any external API call: unsupported file extensions return **415** (audio/video allowlist matching AssemblyAI's formats), and files over `MAX_UPLOAD_BYTES` (default 100 MB) return **413**.
 
-**Admin auth:** if `ADMIN_TOKEN` is set in `.env`, every `/kb/*` endpoint requires it as the `X-Admin-Token` header (401 otherwise). When it is empty (local dev), the KB endpoints stay open. The KB manager page stores your token in the browser and prompts for it on a 401.
+**Admin auth:** if `ADMIN_TOKEN` is set in `.env`, the knowledge base is locked down:
+- `/kb/*` API requires it (via `X-Admin-Token` header **or** the admin cookie)
+- `/static/kb.html` shows a login page instead of the editor - sign in at the form (`POST /kb-admin/login` sets an `HttpOnly` cookie; `/kb-admin/logout` clears it)
+- When `ADMIN_TOKEN` is empty (local dev), everything stays open.
 
 ## 📝 Logging
 
