@@ -451,6 +451,45 @@ async function blobToWavFile(blob) {
   return new File([buffer], 'recording.wav', { type: 'audio/wav' });
 }
 
+async function audioBufferToMp3File(audioBuffer) {
+  const numCh = audioBuffer.numberOfChannels;
+  const sampleRate = audioBuffer.sampleRate;
+  const kbps = 128;
+  const encoder = new lamejs.Mp3Encoder(numCh, sampleRate, kbps);
+
+  const channelData = [];
+  for (let c = 0; c < numCh; c++) channelData.push(audioBuffer.getChannelData(c));
+
+  const samplesPerBlock = 1152;
+  const mp3Chunks = [];
+  const numFrames = audioBuffer.length;
+  const asInt16 = floatArr => {
+    const out = new Int16Array(floatArr.length);
+    for (let i = 0; i < floatArr.length; i++) {
+      const s = Math.max(-1, Math.min(1, floatArr[i]));
+      out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    }
+    return out;
+  };
+
+  for (let offset = 0; offset < numFrames; offset += samplesPerBlock) {
+    const block = Math.min(samplesPerBlock, numFrames - offset);
+    const left = asInt16(channelData[0].subarray(offset, offset + block));
+    if (numCh === 2) {
+      const right = asInt16(channelData[1].subarray(offset, offset + block));
+      const buf = encoder.encodeBuffer(left, right);
+      if (buf.length) mp3Chunks.push(new Int8Array(buf));
+    } else {
+      const buf = encoder.encodeBuffer(left);
+      if (buf.length) mp3Chunks.push(new Int8Array(buf));
+    }
+  }
+  const end = encoder.flush();
+  if (end.length) mp3Chunks.push(new Int8Array(end));
+
+  return new File(mp3Chunks, 'recording.mp3', { type: 'audio/mpeg' });
+}
+
 function finishRecording() {
   stopMediaTracks();
   setRecordingUI(false);
@@ -462,21 +501,30 @@ function finishRecording() {
   const rawBlob = new Blob(mediaChunks, { type: rawType });
   mediaChunks = [];
 
+  const setFile = file => {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    els.fileInput.files = dt.files;
+    updateFileChip();
+  };
+
   blobToWavFile(rawBlob)
-    .then(file => {
-      const dt = new DataTransfer();
-      dt.items.add(file);
-      els.fileInput.files = dt.files;
-      updateFileChip();
+    .then(wavFile => {
+      if (window.lamejs) {
+        // Decode the raw recording, then re-encode as MP3 - the only format
+        // AssemblyAI has been accepting reliably.
+        return rawBlob.arrayBuffer().then(ab => {
+          const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+          const ctx = new Ctx(1, 1, 44100);
+          return ctx.decodeAudioData(ab);
+        }).then(buf => audioBufferToMp3File(buf));
+      }
+      return wavFile;
     })
+    .then(file => setFile(file))
     .catch(() => {
-      // Couldn't decode/re-encode (e.g. Safari mp4) - fall back to the raw blob.
       const ext = rawType === 'audio/mp4' ? 'mp4' : 'webm';
-      const file = new File([rawBlob], `recording.${ext}`, { type: rawType });
-      const dt = new DataTransfer();
-      dt.items.add(file);
-      els.fileInput.files = dt.files;
-      updateFileChip();
+      setFile(new File([rawBlob], `recording.${ext}`, { type: rawType }));
     });
 }
 
