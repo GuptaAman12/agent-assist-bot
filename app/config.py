@@ -33,6 +33,7 @@ KB_NO_MATCH_RESPONSE = os.getenv(
     "KB_NO_MATCH_RESPONSE",
     "I'm not sure about that one. Let me connect you with a human colleague who can help.",
 )
+MAX_HISTORY_TURNS = int(os.getenv("MAX_HISTORY_TURNS", "5"))
 
 TRANSCRIPTION_POLL_INTERVAL_SEC = 2
 TRANSCRIPTION_TIMEOUT_SEC = 120

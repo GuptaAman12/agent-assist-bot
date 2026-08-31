@@ -25,23 +25,31 @@ def _normalize_text(text: str) -> str:
     return text
 
 
-def generate_response(context: str, query: str) -> str:
+def generate_response(context: str, query: str, history: list[dict] | None = None) -> str:
+    messages = [
+        {"role": "system", "content": (
+            "You are a helpful support assistant. Base your answer ONLY on the provided context. "
+            "If the context lacks the information for any part of the user's query, say you are not sure about that part. "
+            "Use earlier turns in the conversation to resolve references like 'my order from earlier' or 'the issue I mentioned'. "
+            "Answer concisely in plain prose or short numbered steps. "
+            "Do not use markdown tables, headings, or code blocks; responses may be spoken aloud. "
+            "Use **bold** sparingly for key actions."
+        )},
+    ]
+    for turn in (history or [])[: config.MAX_HISTORY_TURNS]:
+        if turn.get("transcript"):
+            messages.append({"role": "user", "content": turn["transcript"]})
+        if turn.get("response"):
+            messages.append({"role": "assistant", "content": turn["response"]})
+    messages.append({"role": "user", "content": f"Context:\n{context}\n\nQuery: {query}"})
+
     headers = {
         "Authorization": f"Bearer {config.GROQ_API_KEY}",
         "Content-Type": "application/json",
     }
     payload = {
         "model": config.GROQ_MODEL,
-        "messages": [
-            {"role": "system", "content": (
-                "You are a helpful support assistant. Base your answer ONLY on the provided context. "
-                "If the context lacks the information for any part of the user's query, say you are not sure about that part. "
-                "Answer concisely in plain prose or short numbered steps. "
-                "Do not use markdown tables, headings, or code blocks; responses may be spoken aloud. "
-                "Use **bold** sparingly for key actions."
-            )},
-            {"role": "user", "content": f"Context:\n{context}\n\nQuery: {query}"},
-        ],
+        "messages": messages,
     }
     try:
         res = requests.post(

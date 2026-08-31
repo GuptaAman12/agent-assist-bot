@@ -53,3 +53,40 @@ def test_mojibake_normalized(monkeypatch):
     out = llm.generate_response("ctx", "query")
     assert em_dash_mangled not in out
     assert "go - stop" == out
+
+
+def test_history_included_in_messages(monkeypatch):
+    seen = {}
+
+    def fake_post(url, **kwargs):
+        seen["messages"] = kwargs["json"]["messages"]
+        return FakeResponse(200, {"choices": [{"message": {"content": "ok"}}]})
+
+    monkeypatch.setattr(llm.requests, "post", fake_post)
+    llm.generate_response(
+        "ctx",
+        "what about my order?",
+        history=[
+            {"transcript": "cancel my order", "response": "Go to order history."},
+            {"transcript": "where is it?", "response": "Shipped."},
+        ],
+    )
+    roles = [m["role"] for m in seen["messages"]]
+    assert roles == ["system", "user", "assistant", "user", "assistant", "user"]
+    assert seen["messages"][1]["content"] == "cancel my order"
+    assert seen["messages"][2]["content"] == "Go to order history."
+    assert "what about my order?" in seen["messages"][-1]["content"]
+
+
+def test_history_capped(monkeypatch):
+    seen = {}
+
+    def fake_post(url, **kwargs):
+        seen["messages"] = kwargs["json"]["messages"]
+        return FakeResponse(200, {"choices": [{"message": {"content": "ok"}}]})
+
+    monkeypatch.setattr(llm.requests, "post", fake_post)
+    long_history = [{"transcript": f"q{i}", "response": f"r{i}"} for i in range(20)]
+    llm.generate_response("ctx", "q", history=long_history)
+    # system + 2*cap history + final user message
+    assert len(seen["messages"]) == 1 + 2 * llm.config.MAX_HISTORY_TURNS + 1

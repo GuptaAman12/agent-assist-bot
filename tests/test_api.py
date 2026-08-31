@@ -104,7 +104,7 @@ def test_transcribe_accepts_known_audio_type(client, monkeypatch):
 
 
 def test_assist_match_shape(client, monkeypatch):
-    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q: "answer")
+    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
     r = client.post("/assist/", json={"transcript": "how do i reset", "intent": "unknown"})
     assert r.status_code == 200
     body = r.json()
@@ -122,7 +122,7 @@ def test_assist_no_match(client, monkeypatch):
 
     called = {"llm": False}
 
-    def fake_generate(s, q):
+    def fake_generate(s, q, history=None):
         called["llm"] = True
         return "should not be called"
 
@@ -140,7 +140,7 @@ def test_assist_no_match(client, monkeypatch):
 
 
 def test_assist_takeover_generates_audio(client, monkeypatch):
-    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q: "answer")
+    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
     monkeypatch.setattr("app.main.synthesize", lambda t: ("out.wav", "groq-orpheus"))
     r = client.post("/assist/", json={"transcript": "reset my password", "intent": "password_reset"})
     assert r.status_code == 200
@@ -151,7 +151,7 @@ def test_assist_takeover_generates_audio(client, monkeypatch):
 
 
 def test_assist_non_takeover_no_audio(client, monkeypatch):
-    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q: "answer")
+    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
     monkeypatch.setattr("app.main.synthesize", lambda t: ("out.wav", "groq-orpheus"))
     r = client.post("/assist/", json={"transcript": "refund please", "intent": "refund_request"})
     assert r.json()["ai_takeover"] is False
@@ -160,7 +160,7 @@ def test_assist_non_takeover_no_audio(client, monkeypatch):
 
 def test_assist_mixed_issue_takes_over(client, monkeypatch):
     # Two issues, both automatable -> AI voice takeover should happen.
-    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q: "answer")
+    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
     monkeypatch.setattr("app.main.synthesize", lambda t: ("out.wav", "groq-orpheus"))
     r = client.post(
         "/assist/",
@@ -178,12 +178,69 @@ def test_assist_mixed_issue_takes_over(client, monkeypatch):
 def test_assist_llm_error_maps_502(client, monkeypatch):
     from app.services.llm import LLMError
 
-    def boom(s, q):
+    def boom(s, q, history=None):
         raise LLMError("groq down")
 
     monkeypatch.setattr("app.main.llm_service.generate_response", boom)
     r = client.post("/assist/", json={"transcript": "hi", "intent": "unknown"})
     assert r.status_code == 502
+
+
+def test_assist_forwards_history_to_llm(client, monkeypatch):
+    captured = {}
+
+    def fake_generate(s, q, history=None):
+        captured["history"] = history
+        return "answer"
+
+    monkeypatch.setattr("app.main.llm_service.generate_response", fake_generate)
+    r = client.post(
+        "/assist/",
+        json={
+            "transcript": "what about my order?",
+            "intent": "unknown",
+            "history": [
+                {"transcript": "I want to cancel my order", "response": "Go to order history."},
+                {"transcript": "where is it now?", "response": "It shipped yesterday."},
+            ],
+        },
+    )
+    assert r.status_code == 200
+    assert captured["history"] == [
+        {"transcript": "I want to cancel my order", "response": "Go to order history."},
+        {"transcript": "where is it now?", "response": "It shipped yesterday."},
+    ]
+
+
+def test_assist_no_match_with_history_answers_from_conversation(client, monkeypatch):
+    # No KB match, but a follow-up with history -> LLM is called, not the canned reply.
+    client.app.state.knowledge_base.matches_result = []
+    captured = {}
+
+    def fake_generate(s, q, history=None):
+        captured["context"] = s
+        captured["history"] = history
+        return "answer"
+
+    monkeypatch.setattr("app.main.llm_service.generate_response", fake_generate)
+    r = client.post(
+        "/assist/",
+        json={
+            "transcript": "what about my order from earlier?",
+            "intent": "unknown",
+            "history": [
+                {"transcript": "I want to cancel my order", "response": "Go to order history."},
+            ],
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["response"] == "answer"
+    assert body["source"] is None
+    assert body["sources"] == []
+    assert body["kb_score"] is None
+    assert "previously said" in captured["context"]
+    assert captured["history"][0]["transcript"] == "I want to cancel my order"
 
 
 def test_kb_list(client):

@@ -357,10 +357,14 @@ els.form.addEventListener('submit', async e => {
     });
 
     setStage('Generating AI response…');
+    const historyForLlm = history.slice(0, 5).map(h => ({
+      transcript: h.transcript,
+      response: h.responseRaw
+    }));
     const assist = await postJson('/assist/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transcript, intent })
+      body: JSON.stringify({ transcript, intent, history: historyForLlm })
     });
 
     const item = {

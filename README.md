@@ -6,16 +6,17 @@ A real-time customer support system that transcribes live audio, detects user in
 
 ## 🧩 Features
 
-- 🔊 Upload `.wav` audio (or drag & drop) → instant transcript via AssemblyAI.
-- 🎙️ **Record live from the microphone** right in the dashboard (MediaRecorder) - no file needed; the recording becomes the upload.
+- 🔊 Upload audio files (or drag & drop) → instant transcript via AssemblyAI.
+- 🎙️ **Record live from the microphone** right in the dashboard (MediaRecorder) - the recording is re-encoded to MP3 in the browser and becomes the upload.
 - 🎯 Intent detection from the transcript (password reset, refunds, order tracking…).
 - 🧠 Context-aware RAG using `sentence-transformers` - knowledge-base embeddings are computed once at startup.
 - 🎚️ **Retrieval confidence threshold** - queries that don't match the knowledge base (cosine similarity below `KB_MIN_SIMILARITY`) get an honest "I'm not sure" instead of a confidently wrong answer, and skip the LLM call entirely.
 - 🧩 **Multi-topic retrieval** - mixed recordings pull the top matching KB entries (`sources` array) so every issue in a single call is answered from the knowledge base, not invented.
 - 📝 **Hot-reloadable knowledge base** - add, edit, and remove entries from a dedicated manager page, or edit `knowledge_base.json` directly; changes apply without restarting (invalid edits keep serving the last good state).
-- 💬 Answer generation using **Groq** (`openai/gpt-oss-120b` by default).
-- 🤖 AI takeover: simple intents are answered aloud by a realistic neural voice (**Groq Orpheus**), with automatic gTTS fallback.
-- 🖥️ Modern dashboard: light/dark mode, session history, markdown-rendered responses, live API status, copy-to-clipboard.
+- 💬 Answer generation using **Groq** (`openai/gpt-oss-20b` by default).
+- 💭 **Multi-turn memory** - the dashboard sends the recent conversation with each request, so follow-ups like "what about my order from earlier?" are answered from context, not as isolated one-shot Q&A.
+- 🤖 AI takeover: automatable intents are answered aloud by a realistic neural voice (**Groq Orpheus**), with automatic gTTS fallback. If a recording mentions **any** automatable intent, the bot takes over and speaks.
+- 🖥️ Modern dashboard: light/dark mode, session history that survives page navigation (stored in `sessionStorage`), markdown-rendered responses, live API status, copy-to-clipboard.
 - 📚 Knowledge base manager at `/static/kb.html`: search, inline editing, add/delete, reload from disk.
 
 ## 🛠️ Tech Stack
@@ -24,10 +25,13 @@ A real-time customer support system that transcribes live audio, detects user in
 |------------------------|----------------------------------------------------|
 | Transcription          | [AssemblyAI](https://www.assemblyai.com)           |
 | Embedding & RAG        | Sentence Transformers (`all-MiniLM-L6-v2`)         |
-| LLM for Response       | [Groq API](https://groq.com/) - GPT-OSS 120B       |
+| LLM for Response       | [Groq API](https://groq.com/) - GPT-OSS 20B        |
 | Voice Generation       | [Groq Orpheus](https://console.groq.com/docs/text-to-speech) (`gTTS` fallback) |
+| Mic recording encode   | [lamejs](https://github.com/zhuker/lamejs) (in-browser MP3) |
 | Backend Framework      | FastAPI                                            |
 | Frontend               | HTML + CSS + JS                                    |
+
+> **AssemblyAI format note:** this account reliably transcodes **MP3**; it currently rejects raw WebM/Opus and PCM WAV recordings (`application/octet-stream` transcoding error). All `audio_sample/*.wav` files are actually MP3s (works for that reason), and live mic recordings are re-encoded to MP3 in the browser before upload.
 
 ## 📦 Installation
 
@@ -60,7 +64,7 @@ A real-time customer support system that transcribes live audio, detects user in
    Optional overrides (also listed in `.env.example`):
 
    ```
-   GROQ_MODEL=openai/gpt-oss-120b        # chat model
+   GROQ_MODEL=openai/gpt-oss-20b        # chat model
    EMBEDDING_MODEL=all-MiniLM-L6-v2      # sentence-transformers model
    KB_MIN_SIMILARITY=0.45                # below this, /assist/ answers "I'm not sure"
    MAX_UPLOAD_BYTES=104857600            # max /transcribe/ upload size (100 MB)
@@ -86,7 +90,7 @@ pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-59 tests cover intent detection, KB hot-reload behavior (threshold, external edits, broken-file fail-open, ID stability), TTS stripping/normalization/fallback, AssemblyAI/Groq error paths, and the full API surface - all external calls and the embedding model are mocked, so tests run offline and fast. CI runs them on every push (`.github/workflows/ci.yml`).
+80 tests cover intent detection, KB hot-reload behavior (threshold, external edits, broken-file fail-open, ID stability, admin auth), TTS stripping/normalization/fallback, AssemblyAI/Groq error paths, upload guards, and the full API surface - all external calls and the embedding model are mocked, so tests run offline and fast. CI runs them on every push (`.github/workflows/ci.yml`).
 
 ## 🐳 Docker
 
@@ -124,7 +128,8 @@ app/
     ├── intent.py          # keyword-based intent detection
     └── tts.py             # Groq Orpheus TTS with gTTS fallback
 main.py                    # thin shim so `uvicorn main:app` works
-static/                    # dashboard UI, KB manager page, generated audio
+static/                    # dashboard UI, KB manager page, vendor libs, generated audio
+static/vendor/lame.all.js  # in-browser MP3 encoder for live mic recordings
 knowledge_base.json        # RAG corpus
 ```
 
@@ -132,8 +137,8 @@ knowledge_base.json        # RAG corpus
 
 | Endpoint             | Body                        | Returns                                                      |
 |----------------------|-----------------------------|--------------------------------------------------------------|
-| `POST /transcribe/`  | multipart `.wav` upload     | `{transcript, intent}`                                       |
-| `POST /assist/`      | `{transcript, intent}` JSON | `{response, ai_takeover, source, sources, audio_url, tts_engine, kb_score}` |
+| `POST /transcribe/`  | multipart audio upload   | `{transcript, intent}`                                       |
+| `POST /assist/`      | `{transcript, intent, history?}` JSON | `{response, ai_takeover, source, sources, audio_url, tts_engine, kb_score}` |
 | `GET /health`        | –                           | `{"status": "ok"}`                                           |
 | `GET /kb`            | –                           | `{count, entries: [{id, question, response}]}`               |
 | `POST /kb`           | `{question?, response}`     | created entry                                                |
@@ -142,6 +147,8 @@ knowledge_base.json        # RAG corpus
 | `POST /kb/reload`    | –                           | `{reloaded, count}`                                          |
 
 `audio_url` is set only when `ai_takeover` is true (the response is spoken). Errors return a JSON `{"detail": "..."}` with an appropriate status code (502 for upstream API failures, 504 for transcription timeouts). KB entries can also be edited by modifying `knowledge_base.json` directly - the server detects the change and re-embeds on the next request.
+
+`history` is optional: an array of prior `{transcript, response}` turns (the dashboard sends the last 5). The LLM sees them as conversation context. If the current query has no KB match but `history` is present, the bot answers from the earlier exchange instead of the canned "I'm not sure".
 
 `POST /transcribe/` enforces upload guards before any external API call: unsupported file extensions return **415** (audio/video allowlist matching AssemblyAI's formats), and files over `MAX_UPLOAD_BYTES` (default 100 MB) return **413**.
 
@@ -170,4 +177,4 @@ curl -X POST http://127.0.0.1:8000/assist/ \
   -d '{"transcript": "How do I reset my password?", "intent": "password_reset"}'
 ```
 
-Then open the returned `audio_url`. Sample recordings for `/transcribe/` are in `audio_sample/`.
+Then open the returned `audio_url`. Sample recordings for `/transcribe/` are in `audio_sample/` (note: these are MP3s with a `.wav` extension).

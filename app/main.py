@@ -161,6 +161,7 @@ def root():
 class AssistRequest(BaseModel):
     transcript: str
     intent: str
+    history: list[dict] = []
 
 
 @app.post("/transcribe/")
@@ -210,7 +211,7 @@ def assist_agent(request: AssistRequest):
     kb: KnowledgeBase = app.state.knowledge_base
     matches = kb.best_matches(request.transcript)
 
-    if not matches:
+    if not matches and not request.history:
         return {
             "response": config.KB_NO_MATCH_RESPONSE,
             "ai_takeover": False,
@@ -221,11 +222,23 @@ def assist_agent(request: AssistRequest):
             "kb_score": None,
         }
 
-    sources = [text for text, _ in matches]
-    context = "\n".join(f"[{i + 1}] {text}" for i, text in enumerate(sources))
+    if matches:
+        sources = [text for text, _ in matches]
+        context = "\n".join(f"[{i + 1}] {text}" for i, text in enumerate(sources))
+        kb_score = matches[0][1]
+    else:
+        # No KB match, but the user is following up on an earlier exchange -
+        # answer from the conversation history instead of the knowledge base.
+        sources = []
+        kb_score = None
+        last = request.history[-1]
+        context = (
+            f"The user previously said: {last.get('transcript', '')}\n"
+            f"The assistant previously said: {last.get('response', '')}"
+        )
 
     try:
-        response_text = llm_service.generate_response(context, request.transcript)
+        response_text = llm_service.generate_response(context, request.transcript, request.history)
     except llm_service.LLMError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -242,11 +255,11 @@ def assist_agent(request: AssistRequest):
     return {
         "response": response_text,
         "ai_takeover": ai_takeover,
-        "source": sources[0],
+        "source": sources[0] if sources else None,
         "sources": sources,
         "audio_url": audio_url,
         "tts_engine": tts_engine,
-        "kb_score": matches[0][1],
+        "kb_score": kb_score,
     }
 
 
