@@ -15,6 +15,7 @@ A real-time customer support system that transcribes live audio, detects user in
 - 📝 **Hot-reloadable knowledge base** - add, edit, and remove entries from a dedicated manager page, or edit `knowledge_base.json` directly; changes apply without restarting (invalid edits keep serving the last good state).
 - 💬 Answer generation using **Groq** (`openai/gpt-oss-20b` by default).
 - 💭 **Multi-turn memory** - the dashboard sends the recent conversation with each request, so follow-ups like "what about my order from earlier?" are answered from context, not as isolated one-shot Q&A.
+- 🎫 **Human handoff** - when a caller asks to speak to an agent, or the bot can't match the knowledge base, a support ticket is created (webhook or email), so the handoff actually happens instead of just being promised.
 - 🤖 AI takeover: automatable intents are answered aloud by a realistic neural voice (**Groq Orpheus**), with automatic gTTS fallback. If a recording mentions **any** automatable intent, the bot takes over and speaks.
 - 🖥️ Modern dashboard: light/dark mode, session history that survives page navigation (stored in `sessionStorage`), markdown-rendered responses, live API status, copy-to-clipboard.
 - 📚 Knowledge base manager at `/static/kb.html`: search, inline editing, add/delete, reload from disk.
@@ -69,9 +70,12 @@ A real-time customer support system that transcribes live audio, detects user in
    KB_MIN_SIMILARITY=0.45                # below this, /assist/ answers "I'm not sure"
    MAX_UPLOAD_BYTES=104857600            # max /transcribe/ upload size (100 MB)
    ADMIN_TOKEN=change-me                 # if set, /kb/* requires this as X-Admin-Token
+   HANDOFF_WEBHOOK_URL=                  # POST ticket JSON when a human is needed
    GROQ_TTS_MODEL=canopylabs/orpheus-v1-english
    GROQ_TTS_VOICE=troy                   # autumn/diana/hannah/austin/daniel/troy
    ```
+
+   Handoff can go to an email instead of a webhook (`HANDOFF_EMAIL_TO` + `SMTP_*`); with neither set, tickets are still recorded in the structured logs.
 
 4. **Run the server**
 

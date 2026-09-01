@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from . import config
 from .logging import get_access_logger, set_request_id, setup_logging
+from .services import handoff as handoff_service
 from .services import llm as llm_service
 from .services import transcription as transcription_service
 from .services.intent import detect_intent, detect_intents
@@ -210,8 +211,15 @@ def transcribe(file: UploadFile = File(...)):
 def assist_agent(request: AssistRequest):
     kb: KnowledgeBase = app.state.knowledge_base
     matches = kb.best_matches(request.transcript)
+    detected_intents = detect_intents(request.transcript)
 
     if not matches and not request.history:
+        handoff_id = handoff_service.create_ticket(
+            reason="no_match",
+            transcript=request.transcript,
+            intents=detected_intents,
+            assistant_response=config.KB_NO_MATCH_RESPONSE,
+        )
         return {
             "response": config.KB_NO_MATCH_RESPONSE,
             "ai_takeover": False,
@@ -220,6 +228,7 @@ def assist_agent(request: AssistRequest):
             "audio_url": None,
             "tts_engine": None,
             "kb_score": None,
+            "handoff": handoff_id is not None,
         }
 
     if matches:
@@ -242,15 +251,22 @@ def assist_agent(request: AssistRequest):
     except llm_service.LLMError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    ai_takeover = any(
-        intent in config.SIMPLE_INTENTS for intent in detect_intents(request.transcript)
-    )
+    ai_takeover = any(intent in config.SIMPLE_INTENTS for intent in detected_intents)
 
     audio_url = None
     tts_engine = None
     if ai_takeover:
         filename, tts_engine = synthesize(response_text)
         audio_url = f"/static/{filename}"
+
+    handoff_id = None
+    if "speak_to_agent" in detected_intents:
+        handoff_id = handoff_service.create_ticket(
+            reason="speak_to_agent",
+            transcript=request.transcript,
+            intents=detected_intents,
+            assistant_response=response_text,
+        )
 
     return {
         "response": response_text,
@@ -260,6 +276,7 @@ def assist_agent(request: AssistRequest):
         "audio_url": audio_url,
         "tts_engine": tts_engine,
         "kb_score": kb_score,
+        "handoff": handoff_id is not None,
     }
 
 

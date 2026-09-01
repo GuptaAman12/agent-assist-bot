@@ -390,3 +390,57 @@ def test_kb_page_open_when_no_admin_token(client):
     r = client.get("/static/kb.html")
     assert r.status_code == 200
     assert "kb-add-form" in r.text
+
+
+def test_assist_speak_to_agent_opens_handoff(client, monkeypatch):
+    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
+    captured = {}
+
+    def fake_create(**kwargs):
+        captured.update(kwargs)
+        return "ticket123"
+
+    monkeypatch.setattr("app.main.handoff_service.create_ticket", fake_create)
+    r = client.post(
+        "/assist/",
+        json={"transcript": "I want to talk to a real person about my refund.", "intent": "speak_to_agent"},
+    )
+    assert r.status_code == 200
+    assert r.json()["handoff"] is True
+    assert captured["reason"] == "speak_to_agent"
+
+
+def test_assist_no_match_opens_handoff(client, monkeypatch):
+    client.app.state.knowledge_base.matches_result = []
+    captured = {}
+
+    def fake_create(**kwargs):
+        captured.update(kwargs)
+        return "ticket123"
+
+    monkeypatch.setattr("app.main.handoff_service.create_ticket", fake_create)
+    r = client.post(
+        "/assist/",
+        json={"transcript": "quantum pineapple submarine", "intent": "unknown"},
+    )
+    assert r.status_code == 200
+    assert r.json()["handoff"] is True
+    assert captured["reason"] == "no_match"
+
+
+def test_assist_normal_no_handoff(client, monkeypatch):
+    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
+    called = {"create": False}
+
+    def fake_create(**kwargs):
+        called["create"] = True
+        return "t"
+
+    monkeypatch.setattr("app.main.handoff_service.create_ticket", fake_create)
+    r = client.post(
+        "/assist/",
+        json={"transcript": "reset my password", "intent": "password_reset"},
+    )
+    assert r.status_code == 200
+    assert r.json()["handoff"] is False
+    assert not called["create"]
