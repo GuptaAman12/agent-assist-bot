@@ -203,6 +203,37 @@ class KnowledgeBase:
         text, score = matches[0]
         return text, score
 
+    def import_entries(self, entries: list[dict]) -> int:
+        # Validate already done by caller, but ensure response exists
+        normalized = []
+        for raw in entries:
+            if not isinstance(raw, dict) or "response" not in raw or not str(raw["response"]).strip():
+                raise ValueError("Each entry must have a non-empty 'response'")
+            entry_id = raw.get("id") or uuid.uuid4().hex[:8]
+            normalized.append({
+                "id": entry_id,
+                "question": raw.get("question", ""),
+                "response": str(raw["response"]).strip(),
+                "deleted_at": raw.get("deleted_at"),
+            })
+        # Only keep active for embeddings, but persist all (including soft-deleted if provided)
+        active_responses = [e["response"] for e in normalized if not e.get("deleted_at")]
+        if active_responses:
+            embeddings = self._model.encode(active_responses, convert_to_tensor=True)
+        else:
+            try:
+                dim = self._model.get_sentence_embedding_dimension()
+                embeddings = torch.empty((0, dim))
+            except Exception:
+                embeddings = torch.empty((0, 384))
+        with self._lock:
+            self._entries = normalized
+            self._corpus_embeddings = embeddings
+            to_save = [dict(e) for e in self._entries]
+        _persist(to_save)
+        self._touch_mtime()
+        return sum(1 for e in normalized if not e.get("deleted_at"))
+
     def _touch_mtime(self) -> None:
         try:
             self._mtime = os.stat(config.KNOWLEDGE_BASE_PATH).st_mtime

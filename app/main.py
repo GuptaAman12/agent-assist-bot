@@ -1,13 +1,15 @@
+import json
 import os
 import secrets
 import tempfile
 import time
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -85,6 +87,74 @@ def _has_admin_access(request: Request) -> bool:
         return True
     session_id = request.cookies.get(config.ADMIN_COOKIE_NAME)
     return session_id in ADMIN_SESSIONS and ADMIN_SESSIONS[session_id] == config.ADMIN_TOKEN
+
+
+def require_admin(request: Request, x_admin_token: str | None = Header(default=None)) -> None:
+    if not config.ADMIN_TOKEN:
+        return
+    if x_admin_token == config.ADMIN_TOKEN:
+        return
+    session_id = request.cookies.get(config.ADMIN_COOKIE_NAME)
+    if session_id in ADMIN_SESSIONS and ADMIN_SESSIONS[session_id] == config.ADMIN_TOKEN:
+        return
+    raise HTTPException(status_code=401, detail="Missing or invalid admin token")
+
+
+def _audit_log(request: Request, action: str, entry_id: str | None = None, extra: dict | None = None) -> None:
+    try:
+        from .logging import get_request_id
+
+        rid = get_request_id() or request.headers.get("X-Request-ID", "")
+        # Admin identity: don't log raw token, just presence
+        admin_via = "header" if request.headers.get("X-Admin-Token") == config.ADMIN_TOKEN else ("cookie" if request.cookies.get(config.ADMIN_COOKIE_NAME) in ADMIN_SESSIONS else "open" if not config.ADMIN_TOKEN else "unknown")
+        record = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "request_id": rid,
+            "admin_via": admin_via,
+            "action": action,
+            "entry_id": entry_id,
+            "ip": request.client.host if request.client else "unknown",
+        }
+        if extra:
+            record.update(extra)
+        with open(config.AUDIT_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception:
+        pass  # audit must never break the request
+
+
+# ---- Rate limiting (per-IP sliding window) ----
+
+import threading as _rate_threading
+
+_rate_buckets: dict[str, list[float]] = {}
+_rate_lock = _rate_threading.Lock()
+
+
+def check_rate_limit(request: Request) -> None:
+    window = config.RATE_LIMIT_WINDOW_SEC
+    # Stricter limit for the more expensive transcribe endpoint
+    max_req = config.RATE_LIMIT_MAX_TRANSCRIBE if request.url.path.startswith("/transcribe") else config.RATE_LIMIT_MAX_REQUESTS
+    if max_req <= 0:
+        return
+    ip = request.client.host if request.client else "unknown"
+    now = time.monotonic()
+    cutoff = now - window
+    with _rate_lock:
+        bucket = _rate_buckets.get(ip)
+        if bucket is None:
+            bucket = []
+            _rate_buckets[ip] = bucket
+        # prune
+        bucket[:] = [t for t in bucket if t > cutoff]
+        if len(bucket) >= max_req:
+            raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+        bucket.append(now)
+
+
+def _clear_rate_limit_state() -> None:
+    with _rate_lock:
+        _rate_buckets.clear()
 
 
 @app.middleware("http")
@@ -165,7 +235,7 @@ class AssistRequest(BaseModel):
     history: list[dict] = []
 
 
-@app.post("/transcribe/")
+@app.post("/transcribe/", dependencies=[Depends(require_admin), Depends(check_rate_limit)])
 def transcribe(file: UploadFile = File(...)):
     suffix = (Path(file.filename or "").suffix or "").lower()
     if suffix not in config.ALLOWED_UPLOAD_EXTENSIONS:
@@ -207,7 +277,7 @@ def transcribe(file: UploadFile = File(...)):
     return {"transcript": transcript, "intent": detect_intent(transcript)}
 
 
-@app.post("/assist/")
+@app.post("/assist/", dependencies=[Depends(require_admin), Depends(check_rate_limit)])
 def assist_agent(request: AssistRequest):
     kb: KnowledgeBase = app.state.knowledge_base
     matches = kb.best_matches(request.transcript)
@@ -292,17 +362,6 @@ class KBEntryRequest(BaseModel):
     response: str
 
 
-def require_admin(request: Request, x_admin_token: str | None = Header(default=None)) -> None:
-    if not config.ADMIN_TOKEN:
-        return
-    if x_admin_token == config.ADMIN_TOKEN:
-        return
-    session_id = request.cookies.get(config.ADMIN_COOKIE_NAME)
-    if session_id in ADMIN_SESSIONS and ADMIN_SESSIONS[session_id] == config.ADMIN_TOKEN:
-        return
-    raise HTTPException(status_code=401, detail="Missing or invalid admin token")
-
-
 @app.get("/kb", dependencies=[Depends(require_admin)])
 def kb_list(
     limit: int | None = Query(default=None, ge=1, le=100),
@@ -318,17 +377,18 @@ def kb_list(
 
 
 @app.post("/kb", dependencies=[Depends(require_admin)])
-def kb_add(entry: KBEntryRequest):
+def kb_add(entry: KBEntryRequest, request: Request):
     kb: KnowledgeBase = app.state.knowledge_base
     try:
         created = kb.add_entry(entry.question, entry.response)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    _audit_log(request, "kb_add", created["id"], {"question": entry.question})
     return created
 
 
 @app.put("/kb/{entry_id}", dependencies=[Depends(require_admin)])
-def kb_update(entry_id: str, entry: KBEntryRequest):
+def kb_update(entry_id: str, entry: KBEntryRequest, request: Request):
     kb: KnowledgeBase = app.state.knowledge_base
     try:
         updated = kb.update_entry(entry_id, entry.question, entry.response)
@@ -336,28 +396,77 @@ def kb_update(entry_id: str, entry: KBEntryRequest):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if updated is None:
         raise HTTPException(status_code=404, detail=f"Unknown entry id: {entry_id}")
+    _audit_log(request, "kb_update", entry_id)
     return updated
 
 
 @app.delete("/kb/{entry_id}", dependencies=[Depends(require_admin)])
-def kb_delete(entry_id: str):
+def kb_delete(entry_id: str, request: Request):
     kb: KnowledgeBase = app.state.knowledge_base
     if not kb.remove_entry(entry_id):
         raise HTTPException(status_code=404, detail=f"Unknown entry id: {entry_id}")
+    _audit_log(request, "kb_delete", entry_id)
     return {"deleted": entry_id, "count": kb.count, "undo_token": entry_id}
 
 
 @app.post("/kb/{entry_id}/restore", dependencies=[Depends(require_admin)])
-def kb_restore(entry_id: str):
+def kb_restore(entry_id: str, request: Request):
     kb: KnowledgeBase = app.state.knowledge_base
     restored = kb.restore_entry(entry_id)
     if restored is None:
         raise HTTPException(status_code=404, detail=f"Unknown or not-deleted entry id: {entry_id}")
+    _audit_log(request, "kb_restore", entry_id)
     return restored
 
 
 @app.post("/kb/reload", dependencies=[Depends(require_admin)])
-def kb_reload():
+def kb_reload(request: Request):
     kb: KnowledgeBase = app.state.knowledge_base
     kb.reload()
+    _audit_log(request, "kb_reload")
     return {"reloaded": True, "count": kb.count}
+
+
+@app.get("/kb/export", dependencies=[Depends(require_admin)])
+def kb_export(request: Request):
+    kb: KnowledgeBase = app.state.knowledge_base
+    entries = kb.snapshot(include_deleted=False)
+    _audit_log(request, "kb_export", extra={"count": len(entries)})
+    return JSONResponse(
+        content=entries,
+        headers={"Content-Disposition": 'attachment; filename="knowledge_base.json"'},
+    )
+
+
+@app.post("/kb/import", dependencies=[Depends(require_admin)])
+async def kb_import(request: Request):
+    content_type = request.headers.get("content-type", "")
+    entries_data = None
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        file = form.get("file")
+        if not file:
+            raise HTTPException(status_code=400, detail="Missing file field 'file'")
+        content = await file.read()
+        try:
+            data = json.loads(content.decode("utf-8"))
+        except Exception:
+            raise HTTPException(status_code=422, detail="Invalid JSON file")
+        entries_data = data["entries"] if isinstance(data, dict) and "entries" in data else data
+    else:
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(status_code=422, detail="Invalid JSON body")
+        entries_data = body["entries"] if isinstance(body, dict) and "entries" in body else body
+
+    if not isinstance(entries_data, list):
+        raise HTTPException(status_code=422, detail="Import payload must be a JSON array")
+
+    kb: KnowledgeBase = app.state.knowledge_base
+    try:
+        count = kb.import_entries(entries_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    _audit_log(request, "kb_import", extra={"count": count})
+    return {"imported": count, "count": kb.count}

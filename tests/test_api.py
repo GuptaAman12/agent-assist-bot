@@ -489,3 +489,117 @@ def test_kb_soft_delete_and_restore(client):
     assert r.status_code == 404
     r = client.post("/kb/nonexistent/restore")
     assert r.status_code == 404
+
+
+def test_rate_limit_transcribe(client, monkeypatch):
+    monkeypatch.setattr("app.config.RATE_LIMIT_MAX_TRANSCRIBE", 2)
+    monkeypatch.setattr("app.config.RATE_LIMIT_WINDOW_SEC", 60)
+    from app.main import _clear_rate_limit_state
+
+    _clear_rate_limit_state()
+
+    def fake_transcribe(path):
+        return "hello"
+
+    monkeypatch.setattr("app.main.transcription_service.transcribe_file", fake_transcribe)
+    # First 2 should pass
+    for _ in range(2):
+        r = client.post("/transcribe/", files={"file": ("test.wav", b"RIFFfake", "audio/wav")})
+        assert r.status_code == 200
+    # Third should be rate limited
+    r = client.post("/transcribe/", files={"file": ("test.wav", b"RIFFfake", "audio/wav")})
+    assert r.status_code == 429
+    _clear_rate_limit_state()
+
+
+def test_rate_limit_assist(client, monkeypatch):
+    monkeypatch.setattr("app.config.RATE_LIMIT_MAX_REQUESTS", 2)
+    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
+    from app.main import _clear_rate_limit_state
+
+    _clear_rate_limit_state()
+    for _ in range(2):
+        r = client.post("/assist/", json={"transcript": "hi", "intent": "unknown"})
+        assert r.status_code == 200
+    r = client.post("/assist/", json={"transcript": "hi", "intent": "unknown"})
+    assert r.status_code == 429
+    _clear_rate_limit_state()
+
+
+def test_transcribe_requires_auth_when_admin_token_set(client, monkeypatch):
+    monkeypatch.setattr("app.config.ADMIN_TOKEN", "s3cret")
+    r = client.post("/transcribe/", files={"file": ("test.wav", b"xx", "audio/wav")})
+    assert r.status_code == 401
+    r = client.post(
+        "/transcribe/",
+        files={"file": ("test.wav", b"xx", "audio/wav")},
+        headers={"X-Admin-Token": "s3cret"},
+    )
+    # Will go through to transcribe (mock to avoid real AssemblyAI)
+    # Mock transcribe to avoid failure after auth
+    monkeypatch.setattr("app.main.transcription_service.transcribe_file", lambda p: "hello")
+    r = client.post(
+        "/transcribe/",
+        files={"file": ("test.wav", b"xx", "audio/wav")},
+        headers={"X-Admin-Token": "s3cret"},
+    )
+    assert r.status_code == 200
+
+
+def test_audit_log_written(client, tmp_path, monkeypatch):
+    from app import config as app_config
+
+    monkeypatch.setattr(app_config, "AUDIT_LOG_PATH", tmp_path / "audit.jsonl")
+    r = client.post("/kb", json={"question": "audit q", "response": "audit r"})
+    assert r.status_code == 200
+    log_path = tmp_path / "audit.jsonl"
+    assert log_path.exists()
+    import json
+
+    lines = log_path.read_text(encoding="utf-8").strip().splitlines()
+    assert lines
+    entry = json.loads(lines[-1])
+    assert entry["action"] == "kb_add"
+    assert "request_id" in entry
+    assert entry["entry_id"] == r.json()["id"]
+
+
+def test_kb_export_returns_json(client):
+    r = client.get("/kb/export")
+    assert r.status_code == 200
+    assert "attachment" in r.headers.get("content-disposition", "")
+    data = r.json()
+    assert isinstance(data, list)
+    assert len(data) == 2
+    assert all("response" in e for e in data)
+
+
+def test_kb_import_replaces_entries(client):
+    # Export current
+    export = client.get("/kb/export").json()
+    assert len(export) == 2
+    # Import new set
+    new_entries = [{"question": "q1", "response": "r1"}, {"question": "q2", "response": "r2"}, {"question": "q3", "response": "r3"}]
+    r = client.post("/kb/import", json=new_entries)
+    assert r.status_code == 200
+    assert r.json()["imported"] == 3
+    assert client.get("/kb").json()["count"] == 3
+    # Restore original for other tests (import back)
+    client.post("/kb/import", json=export)
+
+
+def test_kb_import_rejects_invalid(client):
+    r = client.post("/kb/import", json=[{"question": "no response"}])
+    assert r.status_code == 422
+
+
+def test_kb_import_file_upload(client):
+    import json as _json
+    import io
+
+    payload = _json.dumps([{"question": "file q", "response": "file r"}]).encode()
+    r = client.post("/kb/import", files={"file": ("kb.json", payload, "application/json")})
+    assert r.status_code == 200
+    assert r.json()["imported"] == 1
+    # Cleanup: restore
+    client.post("/kb/import", json=[{"question": "reset password", "response": "context one"}, {"question": "check balance", "response": "context two"}])

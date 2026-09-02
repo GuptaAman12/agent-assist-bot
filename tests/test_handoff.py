@@ -65,3 +65,50 @@ def test_no_delivery_configured_still_records(monkeypatch):
     monkeypatch.setattr(handoff.config, "HANDOFF_EMAIL_TO", "")
     ticket_id = handoff.create_ticket(reason="no_match", transcript="q", intents=[], assistant_response="r")
     assert ticket_id  # recorded locally, never raises
+
+
+def test_webhook_retries_and_succeeds(monkeypatch, tmp_path):
+    monkeypatch.setattr(handoff.config, "HANDOFF_WEBHOOK_URL", "https://hooks.example.com/t")
+    monkeypatch.setattr(handoff.config, "HANDOFF_EMAIL_TO", "")
+    monkeypatch.setattr(handoff.config, "HANDOFF_QUEUE_PATH", tmp_path / "queue.jsonl")
+    calls = {"n": 0}
+
+    class FakeResp:
+        def raise_for_status(self):
+            pass
+
+    def fake_post(*a, **k):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise RuntimeError("transient")
+        return FakeResp()
+
+    monkeypatch.setattr(handoff.requests, "post", fake_post)
+    monkeypatch.setattr(handoff.time, "sleep", lambda s: None)
+    monkeypatch.setattr(handoff.random, "uniform", lambda a, b: 0)
+    ticket_id = handoff.create_ticket(reason="speak_to_agent", transcript="q", intents=[], assistant_response="r")
+    assert ticket_id
+    assert calls["n"] == 3
+
+
+def test_webhook_queues_to_disk_after_retries(monkeypatch, tmp_path):
+    monkeypatch.setattr(handoff.config, "HANDOFF_WEBHOOK_URL", "https://hooks.example.com/t")
+    monkeypatch.setattr(handoff.config, "HANDOFF_EMAIL_TO", "")
+    queue_path = tmp_path / "queue.jsonl"
+    monkeypatch.setattr(handoff.config, "HANDOFF_QUEUE_PATH", queue_path)
+
+    def boom(*a, **k):
+        raise RuntimeError("down")
+
+    monkeypatch.setattr(handoff.requests, "post", boom)
+    monkeypatch.setattr(handoff.time, "sleep", lambda s: None)
+    monkeypatch.setattr(handoff.random, "uniform", lambda a, b: 0)
+    ticket_id = handoff.create_ticket(reason="no_match", transcript="q", intents=[], assistant_response="r")
+    assert ticket_id is None
+    # Queued payload should exist on disk
+    assert queue_path.exists()
+    import json
+
+    line = queue_path.read_text(encoding="utf-8").strip().splitlines()[0]
+    data = json.loads(line)
+    assert data["reason"] == "no_match"

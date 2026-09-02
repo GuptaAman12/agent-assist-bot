@@ -55,6 +55,13 @@ ALLOWED_UPLOAD_EXTENSIONS = {
     ".webm", ".mpeg", ".wmv",
 }
 
+RATE_LIMIT_WINDOW_SEC = int(os.getenv("RATE_LIMIT_WINDOW_SEC", "60"))
+RATE_LIMIT_MAX_REQUESTS = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "20"))
+RATE_LIMIT_MAX_TRANSCRIBE = int(os.getenv("RATE_LIMIT_MAX_TRANSCRIBE", "10"))
+
+AUDIT_LOG_PATH = BASE_DIR / os.getenv("AUDIT_LOG_PATH", "knowledge_base.log.jsonl")
+HANDOFF_QUEUE_PATH = BASE_DIR / os.getenv("HANDOFF_QUEUE_PATH", "handoff_queue.jsonl")
+
 INTENT_KEYWORDS = {
     "speak_to_agent": ("human", "representative", "real person", "live agent"),
     "password_reset": ("password",),

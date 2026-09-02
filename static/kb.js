@@ -15,6 +15,8 @@ const els = {
   response: document.getElementById('kb-response'),
   addBtn: document.getElementById('kb-add-btn'),
   error: document.getElementById('kb-error'),
+  exportBtn: document.getElementById('kb-export-btn'),
+  importFile: document.getElementById('kb-import-file'),
   themeToggle: document.getElementById('theme-toggle'),
   iconMoon: document.getElementById('icon-moon'),
   iconSun: document.getElementById('icon-sun')
@@ -315,6 +317,43 @@ els.addForm.addEventListener('submit', async e => {
     showError(err.message);
   } finally {
     els.addBtn.disabled = false;
+  }
+});
+
+els.exportBtn.addEventListener('click', async () => {
+  clearError();
+  try {
+    const res = await fetch('/kb/export');
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail || `Export failed (${res.status})`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'knowledge_base.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    showError(err.message);
+  }
+});
+
+els.importFile.addEventListener('change', async () => {
+  const file = els.importFile.files[0];
+  if (!file) return;
+  clearError();
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    await postJson('/kb/import', { method: 'POST', body: formData });
+    offset = 0;
+    await refresh();
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    els.importFile.value = '';
   }
 });
 

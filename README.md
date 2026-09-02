@@ -17,8 +17,10 @@ A real-time customer support system that transcribes live audio, detects user in
 - 💭 **Multi-turn memory** - the dashboard sends the recent conversation with each request, so follow-ups like "what about my order from earlier?" are answered from context, not as isolated one-shot Q&A.
 - 🎫 **Human handoff** - when a caller asks to speak to an agent, or the bot can't match the knowledge base, a support ticket is created (webhook or email), so the handoff actually happens instead of just being promised.
 - 🤖 AI takeover: automatable intents are answered aloud by a realistic neural voice (**Groq Orpheus**), with automatic gTTS fallback. If a recording mentions **any** automatable intent, the bot takes over and speaks.
+- 🔒 **Rate limiting + auth** on `/transcribe/` and `/assist/` (when `ADMIN_TOKEN` is set) so the credit-burning endpoints can't be abused anonymously.
 - 🖥️ Modern dashboard: light/dark mode, session history that survives page navigation (stored in `sessionStorage`), markdown-rendered responses, live API status, copy-to-clipboard.
-- 📚 Knowledge base manager at `/static/kb.html`: search, inline editing, add/delete, reload from disk.
+- 📚 Knowledge base manager at `/static/kb.html`: search, inline editing, soft-delete with undo, paginated list (`?limit&offset`), import/export (bulk JSON), reload from disk.
+- 📝 **Audit log** (`knowledge_base.log.jsonl`): every admin KB write is appended with timestamp, request ID, and admin identity - never blocks the request.
 
 ## 🛠️ Tech Stack
 
@@ -69,7 +71,9 @@ A real-time customer support system that transcribes live audio, detects user in
    EMBEDDING_MODEL=all-MiniLM-L6-v2      # sentence-transformers model
    KB_MIN_SIMILARITY=0.45                # below this, /assist/ answers "I'm not sure"
    MAX_UPLOAD_BYTES=104857600            # max /transcribe/ upload size (100 MB)
-   ADMIN_TOKEN=change-me                 # if set, /kb/* requires this as X-Admin-Token
+   ADMIN_TOKEN=change-me                 # if set, /kb/* and /transcribe/+/assist/ require auth
+   RATE_LIMIT_MAX_REQUESTS=20            # per-IP per minute for /assist/
+   RATE_LIMIT_MAX_TRANSCRIBE=10          # stricter for the costlier transcribe endpoint
    HANDOFF_WEBHOOK_URL=                  # POST ticket JSON when a human is needed
    GROQ_TTS_MODEL=canopylabs/orpheus-v1-english
    GROQ_TTS_VOICE=troy                   # autumn/diana/hannah/austin/daniel/troy
@@ -144,11 +148,14 @@ knowledge_base.json        # RAG corpus
 | `POST /transcribe/`  | multipart audio upload   | `{transcript, intent}`                                       |
 | `POST /assist/`      | `{transcript, intent, history?}` JSON | `{response, ai_takeover, source, sources, audio_url, tts_engine, kb_score}` |
 | `GET /health`        | –                           | `{"status": "ok"}`                                           |
-| `GET /kb`            | –                           | `{count, entries: [{id, question, response}]}`               |
+| `GET /kb`            | `?limit&offset&include_deleted` | `{count, entries: [{id, question, response}], limit, offset}` |
+| `GET /kb/export`     | –                           | JSON file download (`Content-Disposition: attachment`)       |
 | `POST /kb`           | `{question?, response}`     | created entry                                                |
 | `PUT /kb/{id}`       | `{question?, response}`     | updated entry (re-embedded immediately)                      |
-| `DELETE /kb/{id}`    | –                           | `{deleted, count}`                                           |
+| `DELETE /kb/{id}`    | –                           | `{deleted, count, undo_token}` (soft-delete)                 |
+| `POST /kb/{id}/restore` | –                        | restored entry                                               |
 | `POST /kb/reload`    | –                           | `{reloaded, count}`                                          |
+| `POST /kb/import`    | `file` or JSON `[{question, response}]` | `{imported, count}` (replaces all, re-embeds) |
 
 `audio_url` is set only when `ai_takeover` is true (the response is spoken). Errors return a JSON `{"detail": "..."}` with an appropriate status code (502 for upstream API failures, 504 for transcription timeouts). KB entries can also be edited by modifying `knowledge_base.json` directly - the server detects the change and re-embeds on the next request.
 

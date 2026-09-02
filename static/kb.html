@@ -12,7 +12,7 @@
       document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     })();
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=20">
+  <link rel="stylesheet" href="/static/style.css?v=21">
 </head>
 <body>
   <header class="topbar">
@@ -42,6 +42,11 @@
       <div class="kb-toolbar">
         <input type="text" id="kb-search" placeholder="Filter entries…" autocomplete="off" />
       </div>
+      <div class="kb-import-export" style="display:flex; gap:8px; margin: 0 0 10px;">
+        <button type="button" id="kb-export-btn" class="btn-ghost btn-small" title="Download knowledge base as JSON">Export</button>
+        <label for="kb-import-file" class="btn-ghost btn-small" style="cursor:pointer;" title="Import knowledge base from JSON file">Import</label>
+        <input type="file" id="kb-import-file" accept=".json,application/json" hidden />
+      </div>
       <ul id="kb-list" class="history-list kb-list"></ul>
       <div id="kb-pagination" class="kb-pagination" hidden>
         <button type="button" id="kb-prev" class="btn-ghost btn-small" title="Previous page">Prev</button>
@@ -62,6 +67,6 @@
     </section>
   </main>
 
-  <script src="/static/kb.js?v=4"></script>
+  <script src="/static/kb.js?v=5"></script>
 </body>
 </html>

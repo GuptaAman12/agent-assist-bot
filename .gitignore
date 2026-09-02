@@ -18,3 +18,8 @@ claude-setup.ps1
 
 # agent instructions
 AGENTS.md
+
+# audit and queue (append-only, local)
+knowledge_base.log.jsonl
+handoff_queue.jsonl
+hf_cache/

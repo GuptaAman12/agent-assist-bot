@@ -115,16 +115,17 @@ class FakeKnowledgeBase:
                 return {k: v for k, v in e.items() if k != "deleted_at"}
         return None
 
-    def reload(self):
-        return True
-        return False
-
-    def restore_entry(self, entry_id):
-        for e in self._entries:
-            if e["id"] == entry_id and e.get("deleted_at"):
-                e["deleted_at"] = None
-                return {k: v for k, v in e.items() if k != "deleted_at"}
-        return None
+    def import_entries(self, entries):
+        for e in entries:
+            if not isinstance(e, dict) or "response" not in e or not str(e["response"]).strip():
+                raise ValueError("Each entry must have a non-empty 'response'")
+        self._entries = []
+        for raw in entries:
+            entry_id = raw.get("id") or f"e{self._next_id}"
+            if not raw.get("id"):
+                self._next_id += 1
+            self._entries.append({"id": entry_id, "question": raw.get("question", ""), "response": str(raw["response"]).strip(), "deleted_at": raw.get("deleted_at")})
+        return sum(1 for e in self._entries if not e.get("deleted_at"))
 
     def reload(self):
         return True
@@ -140,13 +141,23 @@ def fake_kb_factory():
 
 
 @pytest.fixture
-def client(monkeypatch):
-    from app.main import app
+def client(monkeypatch, tmp_path):
+    from app import config as app_config
+    from app.main import _clear_rate_limit_state, app
+
     from fastapi.testclient import TestClient
 
+    # High rate limits so normal tests don't hit 429
+    monkeypatch.setattr(app_config, "RATE_LIMIT_MAX_REQUESTS", 1000)
+    monkeypatch.setattr(app_config, "RATE_LIMIT_MAX_TRANSCRIBE", 1000)
+    # Isolate audit log and handoff queue
+    monkeypatch.setattr(app_config, "AUDIT_LOG_PATH", tmp_path / "knowledge_base.log.jsonl")
+    monkeypatch.setattr(app_config, "HANDOFF_QUEUE_PATH", tmp_path / "handoff_queue.jsonl")
+    _clear_rate_limit_state()
     monkeypatch.setattr("app.main.KnowledgeBase", FakeKnowledgeBase)
     with TestClient(app) as c:
         yield c
+    _clear_rate_limit_state()
 
 
 @pytest.fixture
@@ -161,6 +172,8 @@ def rag_environment(monkeypatch, tmp_path):
     kb_path.write_text(json.dumps(entries), encoding="utf-8")
 
     monkeypatch.setattr(rag_module.config, "KNOWLEDGE_BASE_PATH", kb_path)
+    monkeypatch.setattr(rag_module.config, "AUDIT_LOG_PATH", tmp_path / "knowledge_base.log.jsonl")
+    monkeypatch.setattr(rag_module.config, "HANDOFF_QUEUE_PATH", tmp_path / "handoff_queue.jsonl")
     dim = len(entries) + 1  # headroom for entries added during tests
     model = FakeSentenceTransformer()
     for i, e in enumerate(entries):
