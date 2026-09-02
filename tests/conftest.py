@@ -50,8 +50,8 @@ class FakeKnowledgeBase:
 
     def __init__(self):
         self._entries = [
-            {"id": "e1", "question": "reset password", "response": "context one"},
-            {"id": "e2", "question": "check balance", "response": "context two"},
+            {"id": "e1", "question": "reset password", "response": "context one", "deleted_at": None},
+            {"id": "e2", "question": "check balance", "response": "context two", "deleted_at": None},
         ]
         self.match_result = ("context one", 0.8)
         self.matches_result = [("context one", 0.8), ("context two", 0.6)]
@@ -59,10 +59,14 @@ class FakeKnowledgeBase:
 
     @property
     def count(self):
-        return len(self._entries)
+        return sum(1 for e in self._entries if not e.get("deleted_at"))
 
-    def snapshot(self):
-        return [dict(e) for e in self._entries]
+    def snapshot(self, include_deleted: bool = False):
+        return [
+            {k: v for k, v in dict(e).items() if k != "deleted_at"}
+            for e in self._entries
+            if include_deleted or not e.get("deleted_at")
+        ]
 
     def best_match(self, query):
         matches = self.best_matches(query, k=1)
@@ -72,32 +76,55 @@ class FakeKnowledgeBase:
         return text, score
 
     def best_matches(self, query, k=3):
-        return self.matches_result[:k]
+        if not self.matches_result:
+            return []
+        # Respect soft-delete: only return as many matches as active entries
+        return self.matches_result[: min(k, self.count)] if self.count else []
 
     def add_entry(self, question, response):
         if not response.strip():
             raise ValueError("'response' must be a non-empty string")
-        entry = {"id": f"e{self._next_id}", "question": question, "response": response}
+        entry = {"id": f"e{self._next_id}", "question": question, "response": response, "deleted_at": None}
         self._next_id += 1
         self._entries.append(entry)
-        return dict(entry)
+        return {k: v for k, v in entry.items() if k != "deleted_at"}
 
     def update_entry(self, entry_id, question, response):
         if not response.strip():
             raise ValueError("'response' must be a non-empty string")
         for e in self._entries:
-            if e["id"] == entry_id:
+            if e["id"] == entry_id and not e.get("deleted_at"):
                 e["question"] = question
                 e["response"] = response
-                return dict(e)
+                return {k: v for k, v in e.items() if k != "deleted_at"}
         return None
 
     def remove_entry(self, entry_id):
-        for i, e in enumerate(self._entries):
-            if e["id"] == entry_id:
-                del self._entries[i]
+        for e in self._entries:
+            if e["id"] == entry_id and not e.get("deleted_at"):
+                import datetime
+
+                e["deleted_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
                 return True
         return False
+
+    def restore_entry(self, entry_id):
+        for e in self._entries:
+            if e["id"] == entry_id and e.get("deleted_at"):
+                e["deleted_at"] = None
+                return {k: v for k, v in e.items() if k != "deleted_at"}
+        return None
+
+    def reload(self):
+        return True
+        return False
+
+    def restore_entry(self, entry_id):
+        for e in self._entries:
+            if e["id"] == entry_id and e.get("deleted_at"):
+                e["deleted_at"] = None
+                return {k: v for k, v in e.items() if k != "deleted_at"}
+        return None
 
     def reload(self):
         return True

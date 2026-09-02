@@ -403,6 +403,36 @@ a { color: var(--accent); }
 
 /* History */
 
+.handoff-banner {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 13.5px;
+}
+.handoff-icon {
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+}
+.handoff-ticket {
+  margin-left: 6px;
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .history-list {
   list-style: none;
   margin: 0;
@@ -633,6 +663,32 @@ a { color: var(--accent); }
 .kb-add-form input:focus,
 .kb-add-form textarea:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
 #kb-add-btn { justify-self: start; }
+
+.kb-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+.kb-page-info {
+  font-size: 12.5px;
+  color: var(--muted);
+  min-width: 90px;
+  text-align: center;
+}
+.kb-undo-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent-soft);
+  font-size: 13px;
+}
 
 .kb-error { margin-top: 10px; }
 

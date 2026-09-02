@@ -31,6 +31,9 @@ const els = {
   historyCard: document.getElementById('history-card'),
   historyList: document.getElementById('history-list'),
   historyClear: document.getElementById('history-clear'),
+  handoffBanner: document.getElementById('handoff-banner'),
+  handoffText: document.getElementById('handoff-text'),
+  handoffTicket: document.getElementById('handoff-ticket'),
   recordBtn: document.getElementById('record-btn'),
   recordLabel: document.getElementById('record-label'),
   recordingBar: document.getElementById('recording-bar'),
@@ -217,6 +220,19 @@ function showResult(item) {
     els.kbConfidence.hidden = true;
   }
 
+  if (item.handoff) {
+    els.handoffBanner.hidden = false;
+    if (item.ticketId) {
+      els.handoffText.textContent = `A human agent has been notified - ticket #${item.ticketId}.`;
+      els.handoffTicket.textContent = '';
+    } else {
+      els.handoffText.textContent = 'A human agent has been notified - ticket opened.';
+      els.handoffTicket.textContent = '';
+    }
+  } else {
+    els.handoffBanner.hidden = true;
+  }
+
   if (item.audioUrl) {
     els.audioCard.hidden = false;
     els.audioPlayer.src = item.audioUrl;
@@ -377,7 +393,9 @@ els.form.addEventListener('submit', async e => {
       sources: Array.isArray(assist.sources) ? assist.sources : (assist.source ? [assist.source] : []),
       kbScore: assist.kb_score,
       audioUrl: assist.audio_url || null,
-      ttsEngine: assist.tts_engine || null
+      ttsEngine: assist.tts_engine || null,
+      handoff: !!assist.handoff,
+      ticketId: assist.ticket_id || null
     };
     pushHistory(item);
     showResult(item);

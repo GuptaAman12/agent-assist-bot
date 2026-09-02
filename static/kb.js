@@ -3,6 +3,13 @@ const els = {
   search: document.getElementById('kb-search'),
   reloadBtn: document.getElementById('kb-reload-btn'),
   list: document.getElementById('kb-list'),
+  pagination: document.getElementById('kb-pagination'),
+  prevBtn: document.getElementById('kb-prev'),
+  nextBtn: document.getElementById('kb-next'),
+  pageInfo: document.getElementById('kb-page-info'),
+  undoBanner: document.getElementById('kb-undo'),
+  undoText: document.getElementById('kb-undo-text'),
+  undoBtn: document.getElementById('kb-undo-btn'),
   addForm: document.getElementById('kb-add-form'),
   question: document.getElementById('kb-question'),
   response: document.getElementById('kb-response'),
@@ -15,6 +22,11 @@ const els = {
 
 let entries = [];
 let editingId = null;
+let total = 0;
+let offset = 0;
+const PAGE_SIZE = 10;
+let lastDeleted = null;
+let undoTimer = null;
 
 async function postJson(url, options) {
   const res = await fetch(url, options);
@@ -78,6 +90,28 @@ function makeButton(className, text, title) {
   btn.title = title;
   return btn;
 }
+
+function showUndo(entry) {
+  lastDeleted = entry;
+  els.undoText.textContent = `Deleted "${(entry.question || entry.response).slice(0, 40)}"`;
+  els.undoBanner.hidden = false;
+  if (undoTimer) clearTimeout(undoTimer);
+  undoTimer = setTimeout(() => { els.undoBanner.hidden = true; lastDeleted = null; }, 10000);
+}
+
+els.undoBtn.addEventListener('click', async () => {
+  if (!lastDeleted) return;
+  clearError();
+  try {
+    await postJson(`/kb/${lastDeleted.id}/restore`, { method: 'POST' });
+    lastDeleted = null;
+    els.undoBanner.hidden = true;
+    if (undoTimer) clearTimeout(undoTimer);
+    await refresh();
+  } catch (err) {
+    showError(err.message);
+  }
+});
 
 function renderItem(li, entry) {
   li.innerHTML = '';
@@ -158,9 +192,19 @@ function renderItem(li, entry) {
   del.addEventListener('click', async () => {
     clearError();
     try {
-      await postJson(`/kb/${entry.id}`, { method: 'DELETE' });
+      const res = await postJson(`/kb/${entry.id}`, { method: 'DELETE' });
+      const removed = entries.find(e => e.id === entry.id);
       entries = entries.filter(e => e.id !== entry.id);
+      // Adjust offset if page becomes empty
+      if (entries.length === 0 && offset > 0) {
+        offset = Math.max(0, offset - PAGE_SIZE);
+        await refresh();
+        if (removed) showUndo(removed);
+        return;
+      }
+      total = res.count;
       render();
+      if (removed) showUndo(removed);
     } catch (err) {
       showError(err.message);
     }
@@ -177,9 +221,25 @@ function render() {
     e.question.toLowerCase().includes(filter) ||
     e.response.toLowerCase().includes(filter)
   );
-  els.count.textContent = entries.length;
+  els.count.textContent = total;
   els.list.innerHTML = '';
-  visible.forEach(entry => {
+  // When filtering, show all filtered; otherwise show paginated slice (already paginated from server)
+  // If filter active, paginate client-side filtered results
+  let toShow = visible;
+  if (filter) {
+    // Client-side search already filtered; pagination hidden during search
+    els.pagination.hidden = true;
+  } else {
+    els.pagination.hidden = total <= PAGE_SIZE;
+    if (!els.pagination.hidden) {
+      const start = offset + 1;
+      const end = Math.min(offset + entries.length, total);
+      els.pageInfo.textContent = `${start}-${end} of ${total}`;
+      els.prevBtn.disabled = offset === 0;
+      els.nextBtn.disabled = offset + entries.length >= total;
+    }
+  }
+  toShow.forEach(entry => {
     const li = document.createElement('li');
     li.className = 'kb-item';
     renderItem(li, entry);
@@ -190,8 +250,10 @@ function render() {
 async function refresh() {
   clearError();
   try {
-    const data = await postJson('/kb', {});
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
+    const data = await postJson(`/kb?${params}`, {});
     entries = data.entries;
+    total = data.count;
     editingId = null;
     render();
   } catch (err) {
@@ -201,10 +263,23 @@ async function refresh() {
 
 els.search.addEventListener('input', render);
 
+els.prevBtn.addEventListener('click', async () => {
+  if (offset === 0) return;
+  offset = Math.max(0, offset - PAGE_SIZE);
+  await refresh();
+});
+
+els.nextBtn.addEventListener('click', async () => {
+  if (offset + entries.length >= total) return;
+  offset += PAGE_SIZE;
+  await refresh();
+});
+
 els.reloadBtn.addEventListener('click', async () => {
   clearError();
   try {
     await postJson('/kb/reload', { method: 'POST' });
+    offset = 0;
     await refresh();
   } catch (err) {
     showError(err.message);
@@ -226,8 +301,14 @@ els.addForm.addEventListener('submit', async e => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question: els.question.value.trim(), response })
     });
-    entries.push(created);
-    render();
+    // After add, go to last page where new entry appears
+    // Simplest: refresh current page; if not visible due to pagination, jump to last page
+    await refresh();
+    // If new entry not on current page, jump to last page
+    if (!entries.find(en => en.id === created.id) && total > offset + entries.length) {
+      offset = Math.floor((total - 1) / PAGE_SIZE) * PAGE_SIZE;
+      await refresh();
+    }
     els.question.value = '';
     els.response.value = '';
   } catch (err) {

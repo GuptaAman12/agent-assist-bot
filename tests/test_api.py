@@ -444,3 +444,48 @@ def test_assist_normal_no_handoff(client, monkeypatch):
     assert r.status_code == 200
     assert r.json()["handoff"] is False
     assert not called["create"]
+
+
+def test_kb_pagination(client):
+    # Add 3 entries to have 5 total (2 initial + 3)
+    for i in range(3):
+        client.post("/kb", json={"question": f"q{i}", "response": f"r{i}"})
+    r = client.get("/kb?limit=2&offset=0")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["count"] == 5
+    assert len(data["entries"]) == 2
+    assert data["limit"] == 2
+    assert data["offset"] == 0
+    r2 = client.get("/kb?limit=2&offset=2")
+    assert len(r2.json()["entries"]) == 2
+    r3 = client.get("/kb?limit=2&offset=4")
+    assert len(r3.json()["entries"]) == 1
+    # offset beyond total returns empty
+    r4 = client.get("/kb?limit=10&offset=10")
+    assert len(r4.json()["entries"]) == 0
+
+
+def test_kb_soft_delete_and_restore(client):
+    r = client.post("/kb", json={"question": "to delete", "response": "temp"})
+    entry_id = r.json()["id"]
+    assert client.get("/kb").json()["count"] == 3
+    r = client.delete(f"/kb/{entry_id}")
+    assert r.status_code == 200
+    assert r.json()["count"] == 2
+    assert "undo_token" in r.json()
+    # Deleted entry not in active list
+    ids = [e["id"] for e in client.get("/kb").json()["entries"]]
+    assert entry_id not in ids
+    # But visible with include_deleted
+    r = client.get("/kb?include_deleted=true")
+    assert entry_id in [e["id"] for e in r.json()["entries"]]
+    # Restore
+    r = client.post(f"/kb/{entry_id}/restore")
+    assert r.status_code == 200
+    assert client.get("/kb").json()["count"] == 3
+    # Restore non-deleted -> 404
+    r = client.post(f"/kb/{entry_id}/restore")
+    assert r.status_code == 404
+    r = client.post("/kb/nonexistent/restore")
+    assert r.status_code == 404

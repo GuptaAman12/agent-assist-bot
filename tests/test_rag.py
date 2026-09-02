@@ -106,7 +106,28 @@ def test_remove_entry(rag_environment):
     assert kb.remove_entry(entry_id) is True
     assert kb.count == 2
     on_disk = json.loads(kb_path.read_text(encoding="utf-8"))
-    assert len(on_disk) == 2
+    assert len(on_disk) == 3
+    deleted = [e for e in on_disk if e["id"] == entry_id][0]
+    assert deleted.get("deleted_at")
+    # Soft-deleted entry no longer appears in active snapshot
+    assert entry_id not in [e["id"] for e in kb.snapshot()]
+    assert entry_id in [e["id"] for e in kb.snapshot(include_deleted=True)]
+
+
+def test_restore_entry(rag_environment):
+    kb = rag_environment["kb"]
+    kb_path = rag_environment["kb_path"]
+    entry_id = kb.snapshot()[0]["id"]
+    kb.remove_entry(entry_id)
+    assert kb.count == 2
+    restored = kb.restore_entry(entry_id)
+    assert restored is not None
+    assert restored["id"] == entry_id
+    assert kb.count == 3
+    on_disk = json.loads(kb_path.read_text(encoding="utf-8"))
+    restored_raw = [e for e in on_disk if e["id"] == entry_id][0]
+    assert not restored_raw.get("deleted_at")
+    assert kb.restore_entry("nope") is None
 
 
 def test_remove_entry_unknown_id(rag_environment):

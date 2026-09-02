@@ -6,7 +6,7 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -229,6 +229,7 @@ def assist_agent(request: AssistRequest):
             "tts_engine": None,
             "kb_score": None,
             "handoff": handoff_id is not None,
+            "ticket_id": handoff_id,
         }
 
     if matches:
@@ -277,6 +278,7 @@ def assist_agent(request: AssistRequest):
         "tts_engine": tts_engine,
         "kb_score": kb_score,
         "handoff": handoff_id is not None,
+        "ticket_id": handoff_id,
     }
 
 
@@ -302,10 +304,17 @@ def require_admin(request: Request, x_admin_token: str | None = Header(default=N
 
 
 @app.get("/kb", dependencies=[Depends(require_admin)])
-def kb_list():
+def kb_list(
+    limit: int | None = Query(default=None, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    include_deleted: bool = False,
+):
     kb: KnowledgeBase = app.state.knowledge_base
-    entries = kb.snapshot()
-    return {"count": len(entries), "entries": entries}
+    entries = kb.snapshot(include_deleted=include_deleted)
+    total = len(entries)
+    if limit is not None:
+        entries = entries[offset : offset + limit]
+    return {"count": total, "entries": entries, "limit": limit, "offset": offset}
 
 
 @app.post("/kb", dependencies=[Depends(require_admin)])
@@ -335,7 +344,16 @@ def kb_delete(entry_id: str):
     kb: KnowledgeBase = app.state.knowledge_base
     if not kb.remove_entry(entry_id):
         raise HTTPException(status_code=404, detail=f"Unknown entry id: {entry_id}")
-    return {"deleted": entry_id, "count": kb.count}
+    return {"deleted": entry_id, "count": kb.count, "undo_token": entry_id}
+
+
+@app.post("/kb/{entry_id}/restore", dependencies=[Depends(require_admin)])
+def kb_restore(entry_id: str):
+    kb: KnowledgeBase = app.state.knowledge_base
+    restored = kb.restore_entry(entry_id)
+    if restored is None:
+        raise HTTPException(status_code=404, detail=f"Unknown or not-deleted entry id: {entry_id}")
+    return restored
 
 
 @app.post("/kb/reload", dependencies=[Depends(require_admin)])

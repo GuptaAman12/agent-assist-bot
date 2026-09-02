@@ -12,7 +12,7 @@
       document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     })();
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=19">
+  <link rel="stylesheet" href="/static/style.css?v=20">
 </head>
 <body>
   <header class="topbar">
@@ -83,6 +83,14 @@
       </div>
 
       <div id="result-panel" hidden>
+        <div id="handoff-banner" class="handoff-banner" hidden>
+          <span class="handoff-icon" aria-hidden="true">!</span>
+          <div>
+            <strong>Ticket opened</strong>
+            <span id="handoff-text">A human agent has been notified.</span>
+            <span id="handoff-ticket" class="handoff-ticket"></span>
+          </div>
+        </div>
         <div class="card result-card">
           <div class="result-head">
             <h2 class="card-title">Transcript</h2>
@@ -119,6 +127,6 @@
   </main>
 
   <script src="/static/vendor/lame.all.js?v=1"></script>
-  <script src="/static/script.js?v=22"></script>
+  <script src="/static/script.js?v=23"></script>
 </body>
 </html>

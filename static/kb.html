@@ -12,7 +12,7 @@
       document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     })();
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=19">
+  <link rel="stylesheet" href="/static/style.css?v=20">
 </head>
 <body>
   <header class="topbar">
@@ -43,6 +43,15 @@
         <input type="text" id="kb-search" placeholder="Filter entries…" autocomplete="off" />
       </div>
       <ul id="kb-list" class="history-list kb-list"></ul>
+      <div id="kb-pagination" class="kb-pagination" hidden>
+        <button type="button" id="kb-prev" class="btn-ghost btn-small" title="Previous page">Prev</button>
+        <span id="kb-page-info" class="kb-page-info"></span>
+        <button type="button" id="kb-next" class="btn-ghost btn-small" title="Next page">Next</button>
+      </div>
+      <div id="kb-undo" class="kb-undo-banner" hidden>
+        <span id="kb-undo-text"></span>
+        <button type="button" id="kb-undo-btn" class="btn-ghost btn-small">Undo</button>
+      </div>
       <form id="kb-add-form" class="kb-add-form">
         <h3 class="card-title">Add new entry</h3>
         <input type="text" id="kb-question" placeholder="Question (optional, e.g. 'How do I reset my password?')" autocomplete="off" />
@@ -53,6 +62,6 @@
     </section>
   </main>
 
-  <script src="/static/kb.js?v=3"></script>
+  <script src="/static/kb.js?v=4"></script>
 </body>
 </html>
