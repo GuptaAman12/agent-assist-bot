@@ -135,8 +135,8 @@ def test_remove_entry_unknown_id(rag_environment):
     assert kb.remove_entry("nope") is False
 
 
-def _bump_mtime(path):
-    future = time.time() + 5
+def _bump_mtime(path, delta_sec=5):
+    future = time.time() + delta_sec
     os.utime(path, (future, future))
 
 
@@ -170,6 +170,49 @@ def test_reload_if_changed_keeps_stale_data_on_broken_file(rag_environment):
 
     model.set_vector("how do I reset my password", 0, dim)
     assert kb.best_match("how do I reset my password")[0] == "go to login page"
+
+
+def test_reload_assigns_and_persists_stable_ids(rag_environment):
+    kb = rag_environment["kb"]
+    kb_path = rag_environment["kb_path"]
+    # Fixture file starts id-less; the constructor's initial reload() migrates it.
+    on_disk = json.loads(kb_path.read_text(encoding="utf-8"))
+    assert all(e.get("id") for e in on_disk)
+
+    ids_before = [e["id"] for e in kb.snapshot()]
+    _bump_mtime(kb_path)
+    assert kb.reload_if_changed() is True
+    ids_after = [e["id"] for e in kb.snapshot()]
+    assert ids_before == ids_after
+    # A second forced reload is equally stable (no churn).
+    # Use a larger delta: back-to-back bumps can round to the same
+    # NTFS timestamp, which would (correctly) report "unchanged".
+    _bump_mtime(kb_path, delta_sec=10)
+    assert kb.reload_if_changed() is True
+    assert [e["id"] for e in kb.snapshot()] == ids_before
+
+
+def test_reload_dedupes_and_normalizes_ids(rag_environment):
+    kb = rag_environment["kb"]
+    kb_path = rag_environment["kb_path"]
+    kb_path.write_text(
+        json.dumps([
+            {"id": "dup", "response": "first"},
+            {"id": "dup", "response": "second"},
+            {"id": 123, "response": "third"},
+            {"id": "", "response": "fourth"},
+            {"response": "fifth"},
+        ]),
+        encoding="utf-8",
+    )
+    _bump_mtime(kb_path)
+    assert kb.reload_if_changed() is True
+
+    ids = [e["id"] for e in kb.snapshot()]
+    assert len(set(ids)) == 5
+    assert ids[0] == "dup"  # first occurrence keeps its id
+    on_disk = json.loads(kb_path.read_text(encoding="utf-8"))
+    assert [e["id"] for e in on_disk] == ids
 
 
 def test_ids_stable_after_own_write(rag_environment):

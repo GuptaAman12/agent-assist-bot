@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import tempfile
 import threading
@@ -9,6 +10,8 @@ import torch
 from sentence_transformers import SentenceTransformer, util
 
 from .. import config
+
+logger = logging.getLogger(__name__)
 
 
 class KnowledgeBase:
@@ -58,8 +61,20 @@ class KnowledgeBase:
     def reload(self) -> bool:
         raw_entries = config.load_knowledge_base()
         normalized = []
+        used_ids: set[str] = set()
+        migrated = 0
         for raw in raw_entries:
-            entry_id = raw.get("id") or uuid.uuid4().hex[:8]
+            raw_id = raw.get("id")
+            if isinstance(raw_id, str) and raw_id and raw_id not in used_ids:
+                entry_id = raw_id
+            else:
+                # Missing, empty, non-string, or duplicate id: assign a fresh one.
+                # Guard the (astronomically unlikely) collision within this file.
+                entry_id = uuid.uuid4().hex[:8]
+                while entry_id in used_ids:
+                    entry_id = uuid.uuid4().hex[:8]
+                migrated += 1
+            used_ids.add(entry_id)
             normalized.append({
                 "id": entry_id,
                 "question": raw.get("question", ""),
@@ -84,6 +99,15 @@ class KnowledgeBase:
             self._entries = normalized
             self._corpus_embeddings = embeddings
             self._touch_mtime()
+        if migrated:
+            # Write the assigned ids back so they are stable across reloads.
+            # _persist is atomic; re-touch mtime so our own write is not
+            # mistaken for an external edit (which would trigger a reload).
+            try:
+                _persist([dict(e) for e in normalized])
+            finally:
+                self._touch_mtime()
+            logger.info("migrated %d KB entries with stable ids", migrated)
         return True
 
     def add_entry(self, question: str, response: str) -> dict:
