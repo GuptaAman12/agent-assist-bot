@@ -12,9 +12,6 @@ pyproject.toml
 temp.wav
 static/audio/
 
-# local tooling 
-claude-setup.ps1
-
 # agent instructions
 AGENTS.md
 

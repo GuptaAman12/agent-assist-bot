@@ -1,8 +1,10 @@
 import json
 import os
+import threading
 import time
 
 import pytest
+import torch
 
 from app.services import rag
 
@@ -227,3 +229,81 @@ def test_ids_stable_after_own_write(rag_environment):
     assert kb.reload_if_changed() is False
     after = [e["id"] for e in kb.snapshot()]
     assert before == after[:3]
+
+
+def test_reload_only_reencodes_changed_rows(rag_environment):
+    kb = rag_environment["kb"]
+    model = rag_environment["model"]
+    dim = rag_environment["dim"]
+    kb_path = rag_environment["kb_path"]
+
+    ids_before = [e["id"] for e in kb.snapshot()]
+    old_vectors = [row.clone() for row in kb._corpus_embeddings]
+
+    # Rewrite the file keeping ids, changing only the second response.
+    on_disk = json.loads(kb_path.read_text(encoding="utf-8"))
+    on_disk[1]["response"] = "see your balance online"
+    kb_path.write_text(json.dumps(on_disk), encoding="utf-8")
+    _bump_mtime(kb_path)
+
+    model.set_vector("see your balance online", 3, dim)
+    calls = []
+    orig_encode = model.encode
+
+    def recording_encode(sentences, convert_to_tensor=False):
+        texts = [sentences] if isinstance(sentences, str) else list(sentences)
+        calls.extend(texts)
+        return orig_encode(sentences, convert_to_tensor=convert_to_tensor)
+
+    model.encode = recording_encode
+    assert kb.reload_if_changed() is True
+
+    # Only the changed response was (re-)encoded; nothing else touched the model.
+    assert calls == ["see your balance online"]
+    # IDs unchanged, and untouched rows kept their exact vectors.
+    assert [e["id"] for e in kb.snapshot()] == ids_before
+    assert torch.equal(kb._corpus_embeddings[0], old_vectors[0])
+    assert torch.equal(kb._corpus_embeddings[2], old_vectors[2])
+    assert not torch.equal(kb._corpus_embeddings[1], old_vectors[1])
+    # Retrieval still resolves against the updated text.
+    model.set_vector("query balance", 3, dim)
+    assert kb.best_match("query balance")[0] == "see your balance online"
+
+
+def test_reload_skips_encoding_when_nothing_changed(rag_environment):
+    kb = rag_environment["kb"]
+    model = rag_environment["model"]
+    kb_path = rag_environment["kb_path"]
+
+    calls = []
+    orig_encode = model.encode
+
+    def recording_encode(sentences, convert_to_tensor=False):
+        texts = [sentences] if isinstance(sentences, str) else list(sentences)
+        calls.extend(texts)
+        return orig_encode(sentences, convert_to_tensor=convert_to_tensor)
+
+    model.encode = recording_encode
+    before = kb._corpus_embeddings.clone()
+    _bump_mtime(kb_path, delta_sec=10)
+    assert kb.reload_if_changed() is True
+    assert calls == []
+    assert torch.equal(kb._corpus_embeddings, before)
+    assert [e["id"] for e in kb.snapshot()] == [e["id"] for e in kb.snapshot()]
+
+
+def test_lock_is_reentrant(rag_environment):
+    kb = rag_environment["kb"]
+    assert type(kb._lock).__name__ == "RLock"
+
+    done = threading.Event()
+
+    def nested():
+        with kb._lock:
+            with kb._lock:
+                kb.snapshot()  # nested locked call, as future refactors may do
+        done.set()
+
+    t = threading.Thread(target=nested, daemon=True)
+    t.start()
+    assert done.wait(timeout=5), "nested lock acquisition deadlocked"

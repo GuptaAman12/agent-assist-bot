@@ -16,7 +16,9 @@ logger = logging.getLogger(__name__)
 
 class KnowledgeBase:
     def __init__(self) -> None:
-        self._lock = threading.Lock()
+        # RLock: nested acquisition by the same thread is safe (plain Lock
+        # would deadlock). Cross-thread mutual exclusion is unchanged.
+        self._lock = threading.RLock()
         self._model = SentenceTransformer(config.EMBEDDING_MODEL_NAME)
         self._mtime = 0.0
         # All entries including soft-deleted, each dict: {id, question, response, deleted_at}
@@ -81,9 +83,32 @@ class KnowledgeBase:
                 "response": raw["response"],
                 "deleted_at": raw.get("deleted_at"),
             })
-        active_responses = [e["response"] for e in normalized if not e.get("deleted_at")]
-        if active_responses:
-            embeddings = self._model.encode(active_responses, convert_to_tensor=True)
+        new_active = [e for e in normalized if not e.get("deleted_at")]
+
+        with self._lock:
+            # Snapshot old rows by id so unchanged responses keep their vectors.
+            old_rows: dict[str, tuple[str, torch.Tensor]] = {}
+            old_active = [e for e in self._entries if not e.get("deleted_at")]
+            emb = self._corpus_embeddings
+            if emb is not None and emb.numel() > 0:
+                for pos, e in enumerate(old_active):
+                    if pos < emb.shape[0]:
+                        old_rows[e["id"]] = (e["response"], emb[pos])
+            need_idx = [
+                i for i, e in enumerate(new_active)
+                if e["id"] not in old_rows or old_rows[e["id"]][0] != e["response"]
+            ]
+
+        # Encode only new/changed responses; never hold the lock during encode.
+        fresh: dict[int, torch.Tensor] = {}
+        if need_idx:
+            vecs = self._model.encode([new_active[i]["response"] for i in need_idx], convert_to_tensor=True)
+            for pos, i in enumerate(need_idx):
+                fresh[i] = vecs[pos] if vecs.dim() == 2 else vecs
+
+        rows = [fresh[i] if i in fresh else old_rows[new_active[i]["id"]][1] for i in range(len(new_active))]
+        if rows:
+            embeddings = torch.stack(rows)
         else:
             embeddings = torch.empty((0, 384))
             # Dummy shape - will be replaced on next add; best_matches handles empty
