@@ -585,8 +585,16 @@ a { color: var(--accent); }
 
 /* Knowledge base manager page */
 
-.kb-page { grid-template-columns: minmax(0, 760px); justify-content: center; }
-.kb-main-card { display: block; }
+.layout.kb-page {
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+.kb-side {
+  min-width: 0;
+  align-self: start;
+  display: grid;
+  gap: 18px;
+}
+.kb-error-full { grid-column: 1 / -1; margin-top: 0; }
 .kb-hint { margin: 0 0 14px; font-size: 13px; color: var(--muted); }
 .kb-hint code {
   font-family: Consolas, monospace;
@@ -714,6 +722,10 @@ a { color: var(--accent); }
     grid-template-columns: minmax(0, 640px);
     justify-content: center;
     padding: 0 18px;
+  }
+  .layout.kb-page {
+    grid-template-columns: minmax(0, 640px);
+    justify-content: center;
   }
   .sidebar { margin-bottom: 12px; }
   .topbar { padding: 12px 18px; }

@@ -1,66 +1,81 @@
 [
   {
+    "id": "e4d8d1bc",
     "question": "How do I reset my password?",
     "response": "To reset your password, go to the login page, click 'Forgot Password', and follow the instructions sent to your email."
   },
   {
+    "id": "b8e60b51",
     "question": "How can I check my account balance?",
     "response": "Log into your account dashboard and click on 'My Account' to see your current balance."
   },
   {
+    "id": "1e23f1fb",
     "question": "How do I update my address?",
     "response": "You can update your address in profile settings under the 'Address Information' section. Changes take effect immediately."
   },
   {
+    "id": "f8783f8b",
     "question": "I want to talk to a human support agent.",
     "response": "Of course. I can connect you with a live support representative. Average wait time is under 3 minutes. Stay on the line and an agent will join shortly."
   },
   {
+    "id": "cf4b8d28",
     "question": "How do I get a refund?",
     "response": "Refunds are available within 30 days of purchase. Go to 'Order History', select the order, and click 'Request Refund'. Approved refunds arrive in 5-7 business days."
   },
   {
+    "id": "9fcf8a3a",
     "question": "How can I cancel my order?",
     "response": "Orders can be cancelled free of charge within 24 hours of placement. Open 'Order History', choose the order, and press 'Cancel Order'. After 24 hours, use the return process instead."
   },
   {
+    "id": "5c76991d",
     "question": "Where is my order? How do I track it?",
     "response": "Your order status and tracking link are available under 'Order History'. Click 'Track Order' to see real-time carrier updates and the estimated delivery date."
   },
   {
+    "id": "4018a92f",
     "question": "How do I update my payment method or credit card?",
     "response": "Go to 'Billing', then 'Payment Methods', click 'Edit' or 'Add Card', and enter your new card details. Your subscription will automatically switch to the new card."
   },
   {
+    "id": "7103bf0f",
     "question": "My account is locked. What should I do?",
     "response": "Accounts lock after 5 failed login attempts for security. Wait 15 minutes and try again, or use 'Unlock Account' on the login page to receive a verification code by email."
   },
   {
+    "id": "e23706ed",
     "question": "I forgot my username. How do I recover it?",
     "response": "Click 'Forgot Username' on the sign-in page and enter the email tied to your account. We will send your username within a few minutes."
   },
   {
+    "id": "ef242361",
     "question": "How do I enable or disable two-factor authentication?",
     "response": "Open 'Security Settings' and toggle 'Two-Factor Authentication'. You can choose SMS or an authenticator app. Keep at least one backup method enabled."
   },
   {
+    "id": "e9c44e18",
     "question": "How do I upgrade or downgrade my subscription plan?",
     "response": "Go to 'Billing', then 'Plan', and select 'Change Plan'. Upgrades apply immediately with a prorated charge; downgrades take effect at the next billing cycle."
   },
   {
+    "id": "32bcc6fe",
     "question": "How can I download an invoice or receipt?",
     "response": "All invoices are available under 'Billing History'. Click 'Download PDF' next to any transaction to save your invoice or receipt."
   },
   {
+    "id": "2a058827",
     "question": "How do I change my email address?",
     "response": "In 'Account Settings', click 'Edit Email', enter the new address, and confirm via the verification link we send to both the old and new inbox."
   },
   {
+    "id": "e7bb080d",
     "question": "The app is not working or keeps crashing.",
     "response": "First force-close and reopen the app, then check for updates in your app store. If it still crashes, clear the app cache from device settings or reinstall the app."
   },
-  
   {
+    "id": "2cab7ccc",
     "question": "What are your business hours?",
     "response": "Automated support is available 24/7. Live agents are available Monday to Friday, 9 AM to 6 PM in your local time zone, and Saturday, 10 AM to 2 PM."
   }

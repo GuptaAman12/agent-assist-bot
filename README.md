@@ -15,7 +15,7 @@ A real-time customer support system that transcribes live audio, detects user in
 - 📝 **Hot-reloadable knowledge base** - add, edit, and remove entries from a dedicated manager page, or edit `knowledge_base.json` directly; changes apply without restarting (invalid edits keep serving the last good state).
 - 💬 Answer generation using **Groq** (`openai/gpt-oss-20b` by default).
 - 💭 **Multi-turn memory** - the dashboard sends the recent conversation with each request, so follow-ups like "what about my order from earlier?" are answered from context, not as isolated one-shot Q&A.
-- 🎫 **Human handoff** - when a caller asks to speak to an agent, or the bot can't match the knowledge base, a support ticket is created (webhook or email), so the handoff actually happens instead of just being promised.
+- 🎫 **Human handoff** - when a caller asks to speak to an agent, or the bot can't match the knowledge base, a support ticket is created (webhook with retry, else email, else disk queue), so the handoff actually happens instead of just being promised. The dashboard shows a "ticket opened" banner with the ticket ID.
 - 🤖 AI takeover: automatable intents are answered aloud by a realistic neural voice (**Groq Orpheus**), with automatic gTTS fallback. If a recording mentions **any** automatable intent, the bot takes over and speaks.
 - 🔒 **Rate limiting + auth** on `/transcribe/` and `/assist/` (when `ADMIN_TOKEN` is set) so the credit-burning endpoints can't be abused anonymously.
 - 🖥️ Modern dashboard: light/dark mode, session history that survives page navigation (stored in `sessionStorage`), markdown-rendered responses, live API status, copy-to-clipboard.
@@ -98,7 +98,7 @@ pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-80 tests cover intent detection, KB hot-reload behavior (threshold, external edits, broken-file fail-open, ID stability, admin auth), TTS stripping/normalization/fallback, AssemblyAI/Groq error paths, upload guards, and the full API surface - all external calls and the embedding model are mocked, so tests run offline and fast. CI runs them on every push (`.github/workflows/ci.yml`).
+104 tests cover intent detection, KB hot-reload behavior (threshold, external edits, broken-file fail-open, ID stability, admin auth), TTS stripping/normalization/fallback, AssemblyAI/Groq error paths, upload guards, handoff retry/queue, audit log, import/export, and the full API surface - all external calls and the embedding model are mocked, so tests run offline and fast. CI runs them on every push (`.github/workflows/ci.yml`).
 
 ## 🐳 Docker
 
@@ -129,11 +129,13 @@ docker run -p 8000:8000 --env-file .env -v hf_cache:/app/.hf_cache agent-assist-
 app/
 ├── config.py              # env vars, paths, model names, intent keywords
 ├── main.py                # FastAPI app, routes, lifespan (startup validation)
+├── logging.py             # JSON structured logs + per-request ID
 └── services/
     ├── transcription.py   # AssemblyAI upload + polling (with timeout)
     ├── llm.py             # Groq chat completion
     ├── rag.py             # knowledge base load + precomputed embeddings
     ├── intent.py          # keyword-based intent detection
+    ├── handoff.py         # ticket delivery (webhook retry, email, disk queue)
     └── tts.py             # Groq Orpheus TTS with gTTS fallback
 main.py                    # thin shim so `uvicorn main:app` works
 static/                    # dashboard UI, KB manager page, vendor libs, generated audio
@@ -146,7 +148,7 @@ knowledge_base.json        # RAG corpus
 | Endpoint             | Body                        | Returns                                                      |
 |----------------------|-----------------------------|--------------------------------------------------------------|
 | `POST /transcribe/`  | multipart audio upload   | `{transcript, intent}`                                       |
-| `POST /assist/`      | `{transcript, intent, history?}` JSON | `{response, ai_takeover, source, sources, audio_url, tts_engine, kb_score}` |
+| `POST /assist/`      | `{transcript, intent, history?}` JSON | `{response, ai_takeover, source, sources, audio_url, tts_engine, kb_score, handoff, ticket_id}` |
 | `GET /health`        | –                           | `{"status": "ok"}`                                           |
 | `GET /kb`            | `?limit&offset&include_deleted` | `{count, entries: [{id, question, response}], limit, offset}` |
 | `GET /kb/export`     | –                           | JSON file download (`Content-Disposition: attachment`)       |
@@ -157,7 +159,7 @@ knowledge_base.json        # RAG corpus
 | `POST /kb/reload`    | –                           | `{reloaded, count}`                                          |
 | `POST /kb/import`    | `file` or JSON `[{question, response}]` | `{imported, count}` (replaces all, re-embeds) |
 
-`audio_url` is set only when `ai_takeover` is true (the response is spoken). Errors return a JSON `{"detail": "..."}` with an appropriate status code (502 for upstream API failures, 504 for transcription timeouts). KB entries can also be edited by modifying `knowledge_base.json` directly - the server detects the change and re-embeds on the next request.
+`audio_url` is set only when `ai_takeover` is true (the response is spoken). `handoff` is true when a support ticket was opened (check `ticket_id`). Errors return a JSON `{"detail": "..."}` with an appropriate status code (502 for upstream API failures, 504 for transcription timeouts, 429 when over the per-IP rate limit). KB entries can also be edited by modifying `knowledge_base.json` directly - the server detects the change and re-embeds on the next request.
 
 `history` is optional: an array of prior `{transcript, response}` turns (the dashboard sends the last 5). The LLM sees them as conversation context. If the current query has no KB match but `history` is present, the bot answers from the earlier exchange instead of the canned "I'm not sure".
 

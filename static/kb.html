@@ -12,7 +12,7 @@
       document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     })();
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=21">
+  <link rel="stylesheet" href="/static/style.css?v=22">
 </head>
 <body>
   <header class="topbar">
@@ -33,7 +33,8 @@
   </header>
 
   <main class="layout kb-page">
-    <section class="card kb-main-card">
+    <p id="kb-error" class="error-banner kb-error kb-error-full" hidden></p>
+    <section class="card kb-list-card" aria-label="Existing entries">
       <div class="result-head">
         <h2 class="card-title">Entries (<span id="kb-count">0</span>)</h2>
         <button type="button" id="kb-reload-btn" class="btn-ghost btn-small" title="Re-read knowledge_base.json from disk">Reload from disk</button>
@@ -57,14 +58,17 @@
         <span id="kb-undo-text"></span>
         <button type="button" id="kb-undo-btn" class="btn-ghost btn-small">Undo</button>
       </div>
-      <form id="kb-add-form" class="kb-add-form">
-        <h3 class="card-title">Add new entry</h3>
-        <input type="text" id="kb-question" placeholder="Question (optional, e.g. 'How do I reset my password?')" autocomplete="off" />
-        <textarea id="kb-response" rows="3" placeholder="Answer text (required)…" required></textarea>
-        <button type="submit" id="kb-add-btn" class="btn-primary" title="Add entry and re-embed immediately">Add entry</button>
-      </form>
-      <p id="kb-error" class="error-banner kb-error" hidden></p>
     </section>
+    <aside class="kb-side">
+      <section class="card" aria-label="Add entry">
+        <form id="kb-add-form" class="kb-add-form">
+          <h3 class="card-title">Add new entry</h3>
+          <input type="text" id="kb-question" placeholder="Question (optional, e.g. 'How do I reset my password?')" autocomplete="off" />
+          <textarea id="kb-response" rows="3" placeholder="Answer text (required)…" required></textarea>
+          <button type="submit" id="kb-add-btn" class="btn-primary" title="Add entry and re-embed immediately">Add entry</button>
+        </form>
+      </section>
+    </aside>
   </main>
 
   <script src="/static/kb.js?v=5"></script>
