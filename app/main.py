@@ -328,7 +328,7 @@ def assist_agent(request: AssistRequest):
     tts_engine = None
     if ai_takeover:
         filename, tts_engine = synthesize(response_text)
-        audio_url = f"/static/{filename}"
+        audio_url = f"/static/audio/{filename}"
 
     handoff_id = None
     if "speak_to_agent" in detected_intents:

@@ -72,7 +72,7 @@ class TestSynthesize:
         filename, engine = tts.synthesize("hello there")
         assert engine == "groq-orpheus"
         assert filename.endswith(".wav")
-        assert (tts_env["static_dir"] / filename).exists()
+        assert (tts_env["static_dir"] / "audio" / filename).exists()
 
     def test_gtts_fallback_on_error(self, tts_env, monkeypatch):
         def boom(text):
@@ -92,4 +92,4 @@ class TestSynthesize:
         filename, engine = tts.synthesize("hello there")
         assert engine == "gtts-fallback"
         assert filename.endswith(".mp3")
-        assert (tts_env["static_dir"] / filename).exists()
+        assert (tts_env["static_dir"] / "audio" / filename).exists()

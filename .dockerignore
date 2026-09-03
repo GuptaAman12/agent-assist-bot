@@ -8,7 +8,7 @@ __pycache__
 venv/
 .venv/
 temp.wav
-static/ai_response_*
+static/audio/
 audio_sample/
 Dockerfile
 .dockerignore

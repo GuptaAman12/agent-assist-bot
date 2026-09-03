@@ -18,6 +18,7 @@ EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 
 KNOWLEDGE_BASE_PATH = BASE_DIR / "knowledge_base.json"
 STATIC_DIR = BASE_DIR / "static"
+AUDIO_DIR = STATIC_DIR / "audio"
 
 ASSEMBLYAI_UPLOAD_URL = "https://api.assemblyai.com/v2/upload"
 ASSEMBLYAI_TRANSCRIPT_URL = "https://api.assemblyai.com/v2/transcript"

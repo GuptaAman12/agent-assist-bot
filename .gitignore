@@ -10,8 +10,7 @@ pyproject.toml
 
 # runtime artifacts
 temp.wav
-static/ai_response_*.mp3
-static/ai_response_*.wav
+static/audio/
 
 # local tooling 
 claude-setup.ps1

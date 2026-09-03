@@ -112,14 +112,15 @@ def _normalize_wav(parts: list[bytes]) -> bytes:
 def synthesize(text: str) -> tuple[str, str]:
     clean = strip_markdown(text)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    config.AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 
     try:
         parts = [_groq_speech(chunk) for chunk in _split_chunks(clean, config.TTS_MAX_INPUT_CHARS)]
         audio = _normalize_wav(parts)
         filename = f"ai_response_{stamp}_{uuid.uuid4().hex[:8]}.wav"
-        (config.STATIC_DIR / filename).write_bytes(audio)
+        (config.AUDIO_DIR / filename).write_bytes(audio)
         return filename, "groq-orpheus"
     except TTSError:
         filename = f"ai_response_{stamp}_{uuid.uuid4().hex[:8]}.mp3"
-        gTTS(clean).save(str(config.STATIC_DIR / filename))
+        gTTS(clean).save(str(config.AUDIO_DIR / filename))
         return filename, "gtts-fallback"

@@ -189,4 +189,5 @@ def tts_env(monkeypatch, tmp_path):
     static_dir = tmp_path / "static"
     static_dir.mkdir()
     monkeypatch.setattr("app.services.tts.config.STATIC_DIR", static_dir)
+    monkeypatch.setattr("app.services.tts.config.AUDIO_DIR", static_dir / "audio")
     return {"static_dir": static_dir}

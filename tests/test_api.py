@@ -146,7 +146,7 @@ def test_assist_takeover_generates_audio(client, monkeypatch):
     assert r.status_code == 200
     body = r.json()
     assert body["ai_takeover"] is True
-    assert body["audio_url"] == "/static/out.wav"
+    assert body["audio_url"] == "/static/audio/out.wav"
     assert body["tts_engine"] == "groq-orpheus"
 
 
@@ -172,7 +172,7 @@ def test_assist_mixed_issue_takes_over(client, monkeypatch):
     assert r.status_code == 200
     body = r.json()
     assert body["ai_takeover"] is True
-    assert body["audio_url"] == "/static/out.wav"
+    assert body["audio_url"] == "/static/audio/out.wav"
 
 
 def test_assist_llm_error_maps_502(client, monkeypatch):
