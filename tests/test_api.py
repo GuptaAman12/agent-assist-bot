@@ -243,6 +243,39 @@ def test_assist_no_match_with_history_answers_from_conversation(client, monkeypa
     assert captured["history"][0]["transcript"] == "I want to cancel my order"
 
 
+def test_assist_no_match_uses_recent_history_turns(client, monkeypatch):
+    client.app.state.knowledge_base.matches_result = []
+    captured = {}
+
+    def fake_generate(s, q, history=None):
+        captured["context"] = s
+        return "answer"
+
+    monkeypatch.setattr("app.main.llm_service.generate_response", fake_generate)
+    history = [{"transcript": f"q{i}", "response": f"r{i}"} for i in range(10)]
+    r = client.post("/assist/", json={"transcript": "follow-up?", "intent": "unknown", "history": history})
+    assert r.status_code == 200
+    # Tail kept: oldest turns fall off, most recent stay in the context.
+    assert "q0" not in captured["context"]
+    assert "q9" in captured["context"] and "r9" in captured["context"]
+
+
+def test_assist_tts_failure_returns_text_only(client, monkeypatch):
+    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
+
+    def boom(t):
+        raise RuntimeError("tts down")
+
+    monkeypatch.setattr("app.main.synthesize", boom)
+    r = client.post("/assist/", json={"transcript": "reset my password", "intent": "password_reset"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["response"] == "answer"
+    assert body["ai_takeover"] is True
+    assert body["audio_url"] is None
+    assert body["tts_engine"] is None
+
+
 def test_kb_list(client):
     r = client.get("/kb")
     assert r.status_code == 200

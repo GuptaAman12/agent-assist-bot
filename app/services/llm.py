@@ -36,7 +36,7 @@ def generate_response(context: str, query: str, history: list[dict] | None = Non
             "Use **bold** sparingly for key actions."
         )},
     ]
-    for turn in (history or [])[: config.MAX_HISTORY_TURNS]:
+    for turn in (history or [])[-config.MAX_HISTORY_TURNS:]:
         if turn.get("transcript"):
             messages.append({"role": "user", "content": turn["transcript"]})
         if turn.get("response"):

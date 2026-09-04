@@ -90,3 +90,18 @@ def test_history_capped(monkeypatch):
     llm.generate_response("ctx", "q", history=long_history)
     # system + 2*cap history + final user message
     assert len(seen["messages"]) == 1 + 2 * llm.config.MAX_HISTORY_TURNS + 1
+
+
+def test_history_keeps_most_recent(monkeypatch):
+    seen = {}
+
+    def fake_post(url, **kwargs):
+        seen["messages"] = kwargs["json"]["messages"]
+        return FakeResponse(200, {"choices": [{"message": {"content": "ok"}}]})
+
+    monkeypatch.setattr(llm.requests, "post", fake_post)
+    long_history = [{"transcript": f"q{i}", "response": f"r{i}"} for i in range(20)]
+    llm.generate_response("ctx", "q", history=long_history)
+    # Chronological input: tail (most recent) must survive capping, not the head.
+    assert seen["messages"][1]["content"] == "q15"
+    assert seen["messages"][-2]["content"] == "r19"

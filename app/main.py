@@ -308,13 +308,15 @@ def assist_agent(request: AssistRequest):
         kb_score = matches[0][1]
     else:
         # No KB match, but the user is following up on an earlier exchange -
-        # answer from the conversation history instead of the knowledge base.
+        # answer from the recent conversation history instead of the knowledge base.
+        # history is chronological (oldest->newest); keep the tail.
         sources = []
         kb_score = None
-        last = request.history[-1]
-        context = (
-            f"The user previously said: {last.get('transcript', '')}\n"
-            f"The assistant previously said: {last.get('response', '')}"
+        recent = [t for t in request.history[-config.MAX_HISTORY_TURNS:] if t.get("transcript") or t.get("response")]
+        context = "\n".join(
+            f"The user previously said: {t.get('transcript', '')}\n"
+            f"The assistant previously said: {t.get('response', '')}"
+            for t in recent
         )
 
     try:
@@ -327,8 +329,20 @@ def assist_agent(request: AssistRequest):
     audio_url = None
     tts_engine = None
     if ai_takeover:
-        filename, tts_engine = synthesize(response_text)
-        audio_url = f"/static/audio/{filename}"
+        try:
+            filename, tts_engine = synthesize(response_text)
+            audio_url = f"/static/audio/{filename}"
+        except Exception:
+            # TTS (incl. gTTS fallback) must never turn a good answer into a 500.
+            access_logger.warning(
+                "tts failed; returning text-only response",
+                extra={
+                    "req_method": "POST",
+                    "req_path": "/assist/",
+                },
+            )
+            audio_url = None
+            tts_engine = None
 
     handoff_id = None
     if "speak_to_agent" in detected_intents:

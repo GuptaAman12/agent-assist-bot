@@ -373,7 +373,9 @@ els.form.addEventListener('submit', async e => {
     });
 
     setStage('Generating AI response…');
-    const historyForLlm = history.slice(0, 5).map(h => ({
+    // history[] is newest-first (unshift); backend expects chronological
+    // oldest->newest and keeps the tail, so reverse the window.
+    const historyForLlm = history.slice(0, 5).reverse().map(h => ({
       transcript: h.transcript,
       response: h.responseRaw
     }));
