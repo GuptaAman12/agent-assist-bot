@@ -74,6 +74,9 @@ A real-time customer support system that transcribes live audio, detects user in
    ADMIN_TOKEN=change-me                 # if set, /kb/* and /transcribe/+/assist/ require auth
    RATE_LIMIT_MAX_REQUESTS=20            # per-IP per minute for /assist/
    RATE_LIMIT_MAX_TRANSCRIBE=10          # stricter for the costlier transcribe endpoint
+   TRUST_PROXY_HEADERS=false             # true only behind a trusted proxy (uses X-Forwarded-For for rate limits)
+   AUDIO_TTL_SEC=86400                   # prune TTS audio older than this (seconds)
+   AUDIO_MAX_FILES=100                   # keep at most this many TTS audio files
    HANDOFF_WEBHOOK_URL=                  # POST ticket JSON when a human is needed
    GROQ_TTS_MODEL=canopylabs/orpheus-v1-english
    GROQ_TTS_VOICE=troy                   # autumn/diana/hannah/austin/daniel/troy

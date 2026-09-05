@@ -1,5 +1,6 @@
 import io
 import re
+import time
 import uuid
 import wave
 from datetime import datetime
@@ -119,8 +120,58 @@ def synthesize(text: str) -> tuple[str, str]:
         audio = _normalize_wav(parts)
         filename = f"ai_response_{stamp}_{uuid.uuid4().hex[:8]}.wav"
         (config.AUDIO_DIR / filename).write_bytes(audio)
-        return filename, "groq-orpheus"
+        result = (filename, "groq-orpheus")
     except TTSError:
         filename = f"ai_response_{stamp}_{uuid.uuid4().hex[:8]}.mp3"
         gTTS(clean).save(str(config.AUDIO_DIR / filename))
-        return filename, "gtts-fallback"
+        result = (filename, "gtts-fallback")
+    try:
+        prune_old_audio()
+    except Exception:
+        pass  # pruning is best-effort; never break a good response
+    return result
+
+
+def prune_old_audio() -> int:
+    """Delete expired/excess TTS files. Best-effort, never raises.
+
+    Removes `ai_response_*` files older than `AUDIO_TTL_SEC`, then trims to
+    `AUDIO_MAX_FILES` newest. Non-positive config values disable that check.
+    Returns the number of files removed.
+    """
+    try:
+        audio_dir = config.AUDIO_DIR
+        if not audio_dir.exists():
+            return 0
+        try:
+            files = sorted(
+                (p for p in audio_dir.glob("ai_response_*.*") if p.is_file()),
+                key=lambda p: p.stat().st_mtime,
+            )
+        except OSError:
+            return 0
+        removed = 0
+        if config.AUDIO_TTL_SEC > 0:
+            now = time.time()
+            kept = []
+            for p in files:
+                try:
+                    if now - p.stat().st_mtime > config.AUDIO_TTL_SEC:
+                        p.unlink(missing_ok=True)
+                        removed += 1
+                    else:
+                        kept.append(p)
+                except OSError:
+                    kept.append(p)
+            files = kept
+        if config.AUDIO_MAX_FILES > 0:
+            overflow = len(files) - config.AUDIO_MAX_FILES
+            for p in files[: max(0, overflow)]:
+                try:
+                    p.unlink(missing_ok=True)
+                    removed += 1
+                except OSError:
+                    continue
+        return removed
+    except Exception:
+        return 0

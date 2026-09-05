@@ -13,6 +13,9 @@ RUN pip install torch --index-url https://download.pytorch.org/whl/cpu --extra-i
 
 COPY . .
 
+RUN useradd -m appuser && mkdir -p /app/.hf_cache /app/static/audio && chown -R appuser:appuser /app
+USER appuser
+
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s \

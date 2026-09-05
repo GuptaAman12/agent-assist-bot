@@ -20,7 +20,7 @@ from .services import llm as llm_service
 from .services import transcription as transcription_service
 from .services.intent import detect_intent, detect_intents
 from .services.rag import KnowledgeBase
-from .services.tts import synthesize
+from .services.tts import prune_old_audio, synthesize
 
 setup_logging()
 access_logger = get_access_logger()
@@ -36,6 +36,10 @@ async def lifespan(app: FastAPI):
     if missing:
         raise RuntimeError(f"Missing required environment variables: {', '.join(missing)} (check your .env file)")
     app.state.knowledge_base = KnowledgeBase()
+    try:
+        prune_old_audio()
+    except Exception:
+        pass  # audio pruning is best-effort; never block startup
     yield
 
 
@@ -100,6 +104,16 @@ def require_admin(request: Request, x_admin_token: str | None = Header(default=N
     raise HTTPException(status_code=401, detail="Missing or invalid admin token")
 
 
+def get_client_ip(request: Request) -> str:
+    if config.TRUST_PROXY_HEADERS:
+        xff = request.headers.get("x-forwarded-for", "")
+        if xff:
+            first = xff.split(",")[0].strip()
+            if first:
+                return first
+    return request.client.host if request.client else "unknown"
+
+
 def _audit_log(request: Request, action: str, entry_id: str | None = None, extra: dict | None = None) -> None:
     try:
         from .logging import get_request_id
@@ -113,7 +127,7 @@ def _audit_log(request: Request, action: str, entry_id: str | None = None, extra
             "admin_via": admin_via,
             "action": action,
             "entry_id": entry_id,
-            "ip": request.client.host if request.client else "unknown",
+            "ip": get_client_ip(request),
         }
         if extra:
             record.update(extra)
@@ -137,7 +151,7 @@ def check_rate_limit(request: Request) -> None:
     max_req = config.RATE_LIMIT_MAX_TRANSCRIBE if request.url.path.startswith("/transcribe") else config.RATE_LIMIT_MAX_REQUESTS
     if max_req <= 0:
         return
-    ip = request.client.host if request.client else "unknown"
+    ip = get_client_ip(request)
     now = time.monotonic()
     cutoff = now - window
     with _rate_lock:
@@ -148,7 +162,12 @@ def check_rate_limit(request: Request) -> None:
         # prune
         bucket[:] = [t for t in bucket if t > cutoff]
         if len(bucket) >= max_req:
-            raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+            retry_after = max(1, int(window - (now - bucket[0])) + 1)
+            raise HTTPException(
+                status_code=429,
+                detail="Rate limit exceeded. Try again later.",
+                headers={"Retry-After": str(retry_after)},
+            )
         bucket.append(now)
 
 

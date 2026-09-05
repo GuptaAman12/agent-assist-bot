@@ -59,6 +59,16 @@ ALLOWED_UPLOAD_EXTENSIONS = {
 RATE_LIMIT_WINDOW_SEC = int(os.getenv("RATE_LIMIT_WINDOW_SEC", "60"))
 RATE_LIMIT_MAX_REQUESTS = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "20"))
 RATE_LIMIT_MAX_TRANSCRIBE = int(os.getenv("RATE_LIMIT_MAX_TRANSCRIBE", "10"))
+# Behind a reverse proxy all requests share the proxy IP unless X-Forwarded-For
+# is honored. Off by default: trusting the header unconditionally lets any
+# client bypass rate limits by spoofing it. Enable only behind a trusted proxy.
+TRUST_PROXY_HEADERS = os.getenv("TRUST_PROXY_HEADERS", "false").lower() in ("1", "true", "yes")
+
+# TTS audio retention (static/audio/ is gitignored runtime clutter). Files are
+# pruned opportunistically after each synthesize() plus once at startup.
+# Non-positive values disable that check (keep everything).
+AUDIO_TTL_SEC = int(os.getenv("AUDIO_TTL_SEC", str(24 * 3600)))
+AUDIO_MAX_FILES = int(os.getenv("AUDIO_MAX_FILES", "100"))
 
 AUDIT_LOG_PATH = BASE_DIR / os.getenv("AUDIT_LOG_PATH", "knowledge_base.log.jsonl")
 HANDOFF_QUEUE_PATH = BASE_DIR / os.getenv("HANDOFF_QUEUE_PATH", "handoff_queue.jsonl")
