@@ -27,6 +27,9 @@ let editingId = null;
 let total = 0;
 let offset = 0;
 const PAGE_SIZE = 10;
+const SEARCH_LIMIT = 100; // GET /kb caps limit at 100; search refetches up to that
+let searchCache = null; // full-list snapshot while a filter is active, else null
+let searchTimer = null;
 let lastDeleted = null;
 let undoTimer = null;
 
@@ -146,9 +149,13 @@ function renderItem(li, entry) {
           body: JSON.stringify({ question: q.value.trim(), response: newResponse })
         });
         const idx = entries.findIndex(e => e.id === entry.id);
-        entries[idx] = updated;
-        editingId = null;
-        render();
+        if (searchCache) {
+          await refresh(); // re-fetch the full-list snapshot
+        } else {
+          entries[idx] = updated;
+          editingId = null;
+          render();
+        }
       } catch (err) {
         showError(err.message);
         save.disabled = false;
@@ -205,7 +212,11 @@ function renderItem(li, entry) {
         return;
       }
       total = res.count;
-      render();
+      if (searchCache) {
+        await refresh(); // re-fetch the full-list snapshot
+      } else {
+        render();
+      }
       if (removed) showUndo(removed);
     } catch (err) {
       showError(err.message);
@@ -218,9 +229,12 @@ function renderItem(li, entry) {
 
 function render() {
   const filter = els.search.value.trim().toLowerCase();
-  const visible = entries.filter(e =>
+  // entries holds only the current server page; while filtering, search the
+  // full-list snapshot instead so matches on other pages are not missed.
+  const source = searchCache || entries;
+  const visible = source.filter(e =>
     !filter ||
-    e.question.toLowerCase().includes(filter) ||
+    (e.question || '').toLowerCase().includes(filter) ||
     e.response.toLowerCase().includes(filter)
   );
   els.count.textContent = total;
@@ -252,10 +266,19 @@ function render() {
 async function refresh() {
   clearError();
   try {
-    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
-    const data = await postJson(`/kb?${params}`, {});
-    entries = data.entries;
-    total = data.count;
+    if (els.search.value.trim()) {
+      // Filter active: fetch the full list (not just the current page) so
+      // search spans every entry. Debounced by the input handler below.
+      const data = await postJson(`/kb?limit=${SEARCH_LIMIT}&offset=0`, {});
+      searchCache = data.entries;
+      total = data.count;
+    } else {
+      searchCache = null;
+      const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
+      const data = await postJson(`/kb?${params}`, {});
+      entries = data.entries;
+      total = data.count;
+    }
     editingId = null;
     render();
   } catch (err) {
@@ -263,7 +286,10 @@ async function refresh() {
   }
 }
 
-els.search.addEventListener('input', render);
+els.search.addEventListener('input', () => {
+  if (searchTimer) clearTimeout(searchTimer);
+  searchTimer = setTimeout(refresh, 250);
+});
 
 els.prevBtn.addEventListener('click', async () => {
   if (offset === 0) return;

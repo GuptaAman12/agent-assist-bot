@@ -9,7 +9,7 @@ A real-time customer support system that transcribes live audio, detects user in
 - 🔊 Upload audio files (or drag & drop) → instant transcript via AssemblyAI.
 - 🎙️ **Record live from the microphone** right in the dashboard (MediaRecorder) - the recording is re-encoded to MP3 in the browser and becomes the upload.
 - 🎯 Intent detection from the transcript (password reset, refunds, order tracking…).
-- 🧠 Context-aware RAG using `sentence-transformers` - knowledge-base embeddings are computed once at startup.
+- 🧠 Context-aware RAG using `sentence-transformers` - knowledge-base entries are embedded as question + response at startup and incrementally re-embedded when entries change.
 - 🎚️ **Retrieval confidence threshold** - queries that don't match the knowledge base (cosine similarity below `KB_MIN_SIMILARITY`) get an honest "I'm not sure" instead of a confidently wrong answer, and skip the LLM call entirely.
 - 🧩 **Multi-topic retrieval** - mixed recordings pull the top matching KB entries (`sources` array) so every issue in a single call is answered from the knowledge base, not invented.
 - 📝 **Hot-reloadable knowledge base** - add, edit, and remove entries from a dedicated manager page, or edit `knowledge_base.json` directly; changes apply without restarting (invalid edits keep serving the last good state).
@@ -17,9 +17,10 @@ A real-time customer support system that transcribes live audio, detects user in
 - 💭 **Multi-turn memory** - the dashboard sends the recent conversation with each request, so follow-ups like "what about my order from earlier?" are answered from context, not as isolated one-shot Q&A.
 - 🎫 **Human handoff** - when a caller asks to speak to an agent, or the bot can't match the knowledge base, a support ticket is created (webhook with retry, else email, else disk queue), so the handoff actually happens instead of just being promised. The dashboard shows a "ticket opened" banner with the ticket ID.
 - 🤖 AI takeover: automatable intents are answered aloud by a realistic neural voice (**Groq Orpheus**), with automatic gTTS fallback. If a recording mentions **any** automatable intent, the bot takes over and speaks.
-- 🔒 **Rate limiting + auth** on `/transcribe/` and `/assist/` (when `ADMIN_TOKEN` is set) so the credit-burning endpoints can't be abused anonymously.
+- 🔒 **Rate limiting + auth** on `/transcribe/` and `/assist/` (when `ADMIN_TOKEN` is set) so the credit-burning endpoints can't be abused anonymously. Over-limit responses carry a `Retry-After` header; set `TRUST_PROXY_HEADERS=true` only behind a trusted reverse proxy so limits key off `X-Forwarded-For`.
+- 🧹 **TTS audio pruning** - generated voice files in `static/audio/` are evicted past `AUDIO_TTL_SEC` / `AUDIO_MAX_FILES` (checked at startup and after each synthesis), so the disk can't fill up unattended.
 - 🖥️ Modern dashboard: light/dark mode, session history that survives page navigation (stored in `sessionStorage`), markdown-rendered responses, live API status, copy-to-clipboard.
-- 📚 Knowledge base manager at `/static/kb.html`: search, inline editing, soft-delete with undo, paginated list (`?limit&offset`), import/export (bulk JSON), reload from disk.
+- 📚 Knowledge base manager at `/static/kb.html`: global search (spans all pages), inline editing, soft-delete with undo, paginated list (`?limit&offset`), import/export (bulk JSON), reload from disk.
 - 📝 **Audit log** (`knowledge_base.log.jsonl`): every admin KB write is appended with timestamp, request ID, and admin identity - never blocks the request.
 
 ## 🛠️ Tech Stack
@@ -101,7 +102,7 @@ pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-104 tests cover intent detection, KB hot-reload behavior (threshold, external edits, broken-file fail-open, ID stability, admin auth), TTS stripping/normalization/fallback, AssemblyAI/Groq error paths, upload guards, handoff retry/queue, audit log, import/export, and the full API surface - all external calls and the embedding model are mocked, so tests run offline and fast. CI runs them on every push (`.github/workflows/ci.yml`).
+124 tests cover intent detection (incl. word-boundary behavior), KB hot-reload behavior (threshold, external edits, broken-file fail-open, ID stability, question+response re-embedding, admin auth), TTS stripping/normalization/fallback/pruning, AssemblyAI/Groq error paths, upload guards, handoff retry/queue, rate-limit `Retry-After` + proxy headers, audit log, import/export, and the full API surface - all external calls and the embedding model are mocked, so tests run offline and fast. CI runs them on every push (`.github/workflows/ci.yml`).
 
 ## 🐳 Docker
 
@@ -162,7 +163,7 @@ knowledge_base.json        # RAG corpus
 | `POST /kb/reload`    | –                           | `{reloaded, count}`                                          |
 | `POST /kb/import`    | `file` or JSON `[{question, response}]` | `{imported, count}` (replaces all, re-embeds) |
 
-`audio_url` is set only when `ai_takeover` is true (the response is spoken). `handoff` is true when a support ticket was opened (check `ticket_id`). Errors return a JSON `{"detail": "..."}` with an appropriate status code (502 for upstream API failures, 504 for transcription timeouts, 429 when over the per-IP rate limit). KB entries can also be edited by modifying `knowledge_base.json` directly - the server detects the change and re-embeds on the next request.
+`audio_url` is set only when `ai_takeover` is true (the response is spoken). `handoff` is true when a support ticket was opened (check `ticket_id`). Errors return a JSON `{"detail": "..."}` with an appropriate status code (502 for upstream API failures, 504 for transcription timeouts, 429 with a `Retry-After` header when over the per-IP rate limit). KB entries can also be edited by modifying `knowledge_base.json` directly - the server detects the change and re-embeds on the next request.
 
 `history` is optional: an array of prior `{transcript, response}` turns (the dashboard sends the last 5). The LLM sees them as conversation context. If the current query has no KB match but `history` is present, the bot answers from the earlier exchange instead of the canned "I'm not sure".
 
