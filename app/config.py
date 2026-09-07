@@ -72,6 +72,7 @@ AUDIO_MAX_FILES = int(os.getenv("AUDIO_MAX_FILES", "100"))
 
 AUDIT_LOG_PATH = BASE_DIR / os.getenv("AUDIT_LOG_PATH", "knowledge_base.log.jsonl")
 HANDOFF_QUEUE_PATH = BASE_DIR / os.getenv("HANDOFF_QUEUE_PATH", "handoff_queue.jsonl")
+ANALYTICS_LOG_PATH = BASE_DIR / os.getenv("ANALYTICS_LOG_PATH", "analytics.log.jsonl")
 
 INTENT_KEYWORDS = {
     "speak_to_agent": ("human", "representative", "real person", "live agent"),

@@ -22,6 +22,7 @@ A real-time customer support system that transcribes live audio, detects user in
 - 🖥️ Modern dashboard: light/dark mode, session history that survives page navigation (stored in `sessionStorage`), markdown-rendered responses, live API status, copy-to-clipboard.
 - 📚 Knowledge base manager at `/static/kb.html`: global search (spans all pages), inline editing, soft-delete with undo, paginated list (`?limit&offset`), import/export (bulk JSON), reload from disk.
 - 📝 **Audit log** (`knowledge_base.log.jsonl`): every admin KB write is appended with timestamp, request ID, and admin identity - never blocks the request.
+- 📊 **Usage analytics** (`analytics.log.jsonl` + `GET /stats`): every billable request logs its cost markers (LLM/TTS/handoff use), every below-threshold query is kept for KB curation, and process-local counters (handoffs by reason, takeovers, TTS engines) are served as JSON - all best-effort, never in the request path.
 
 ## 🛠️ Tech Stack
 
@@ -102,7 +103,7 @@ pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-124 tests cover intent detection (incl. word-boundary behavior), KB hot-reload behavior (threshold, external edits, broken-file fail-open, ID stability, question+response re-embedding, admin auth), TTS stripping/normalization/fallback/pruning, AssemblyAI/Groq error paths, upload guards, handoff retry/queue, rate-limit `Retry-After` + proxy headers, audit log, import/export, and the full API surface - all external calls and the embedding model are mocked, so tests run offline and fast. CI runs them on every push (`.github/workflows/ci.yml`).
+134 tests cover intent detection (incl. word-boundary behavior), KB hot-reload behavior (threshold, external edits, broken-file fail-open, ID stability, question+response re-embedding, admin auth), TTS stripping/normalization/fallback/pruning, AssemblyAI/Groq error paths, upload guards, handoff retry/queue, rate-limit `Retry-After` + proxy headers, analytics events/counters/`/stats`, audit log, import/export, and the full API surface - all external calls and the embedding model are mocked, so tests run offline and fast. CI runs them on every push (`.github/workflows/ci.yml`).
 
 ## 🐳 Docker
 
@@ -154,6 +155,7 @@ knowledge_base.json        # RAG corpus
 | `POST /transcribe/`  | multipart audio upload   | `{transcript, intent}`                                       |
 | `POST /assist/`      | `{transcript, intent, history?}` JSON | `{response, ai_takeover, source, sources, audio_url, tts_engine, kb_score, handoff, ticket_id}` |
 | `GET /health`        | –                           | `{"status": "ok"}`                                           |
+| `GET /stats`         | –                           | `{counters, kb_count}` (process-local usage aggregates)      |
 | `GET /kb`            | `?limit&offset&include_deleted` | `{count, entries: [{id, question, response}], limit, offset}` |
 | `GET /kb/export`     | –                           | JSON file download (`Content-Disposition: attachment`)       |
 | `POST /kb`           | `{question?, response}`     | created entry                                                |

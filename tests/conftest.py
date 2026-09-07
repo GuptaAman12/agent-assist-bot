@@ -153,11 +153,16 @@ def client(monkeypatch, tmp_path):
     # Isolate audit log and handoff queue
     monkeypatch.setattr(app_config, "AUDIT_LOG_PATH", tmp_path / "knowledge_base.log.jsonl")
     monkeypatch.setattr(app_config, "HANDOFF_QUEUE_PATH", tmp_path / "handoff_queue.jsonl")
+    monkeypatch.setattr(app_config, "ANALYTICS_LOG_PATH", tmp_path / "analytics.log.jsonl")
     _clear_rate_limit_state()
+    from app.services import analytics as analytics_service
+
+    analytics_service.reset()
     monkeypatch.setattr("app.main.KnowledgeBase", FakeKnowledgeBase)
     with TestClient(app) as c:
         yield c
     _clear_rate_limit_state()
+    analytics_service.reset()
 
 
 @pytest.fixture

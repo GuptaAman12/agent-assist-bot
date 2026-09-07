@@ -18,4 +18,5 @@ AGENTS.md
 # audit and queue (append-only, local)
 knowledge_base.log.jsonl
 handoff_queue.jsonl
+analytics.log.jsonl
 hf_cache/

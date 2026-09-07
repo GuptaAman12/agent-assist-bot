@@ -6,6 +6,9 @@ from datetime import datetime, timezone
 _request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="")
 
 _EXTRA_FIELDS = ("req_id", "req_method", "req_path", "req_status", "req_duration_ms")
+# Domain extras actually emitted via extra={...} (handoff, analytics). Without
+# listing here JsonFormatter silently drops them - ticket_id/reason were lost.
+_ANALYTICS_FIELDS = ("ticket_id", "reason", "error", "event")
 
 
 def get_request_id() -> str:
@@ -24,7 +27,7 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
-        for field in _EXTRA_FIELDS:
+        for field in _EXTRA_FIELDS + _ANALYTICS_FIELDS:
             value = getattr(record, field, None)
             if value is not None:
                 payload[field] = value

@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from . import config
 from .logging import get_access_logger, set_request_id, setup_logging
+from .services import analytics as analytics_service
 from .services import handoff as handoff_service
 from .services import llm as llm_service
 from .services import transcription as transcription_service
@@ -293,7 +294,10 @@ def transcribe(file: UploadFile = File(...)):
     finally:
         os.unlink(temp_path)
 
-    return {"transcript": transcript, "intent": detect_intent(transcript)}
+    intent = detect_intent(transcript)
+    analytics_service.record("transcribe_requests")
+    analytics_service.log_event("transcribe", intent=intent)
+    return {"transcript": transcript, "intent": intent}
 
 
 @app.post("/assist/", dependencies=[Depends(require_admin), Depends(check_rate_limit)])
@@ -308,6 +312,9 @@ def assist_agent(request: AssistRequest):
             transcript=request.transcript,
             intents=detected_intents,
             assistant_response=config.KB_NO_MATCH_RESPONSE,
+        )
+        analytics_service.log_no_match(
+            request.transcript, detected_intents, handoff_id=handoff_id
         )
         return {
             "response": config.KB_NO_MATCH_RESPONSE,
@@ -331,6 +338,9 @@ def assist_agent(request: AssistRequest):
         # history is chronological (oldest->newest); keep the tail.
         sources = []
         kb_score = None
+        analytics_service.log_no_match(
+            request.transcript, detected_intents, from_history=True
+        )
         recent = [t for t in request.history[-config.MAX_HISTORY_TURNS:] if t.get("transcript") or t.get("response")]
         context = "\n".join(
             f"The user previously said: {t.get('transcript', '')}\n"
@@ -342,6 +352,7 @@ def assist_agent(request: AssistRequest):
         response_text = llm_service.generate_response(context, request.transcript, request.history)
     except llm_service.LLMError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    analytics_service.record("llm_calls")
 
     ai_takeover = any(intent in config.SIMPLE_INTENTS for intent in detected_intents)
 
@@ -362,6 +373,7 @@ def assist_agent(request: AssistRequest):
             )
             audio_url = None
             tts_engine = None
+    analytics_service.record(f"tts:{tts_engine or 'none'}")
 
     handoff_id = None
     if "speak_to_agent" in detected_intents:
@@ -371,6 +383,18 @@ def assist_agent(request: AssistRequest):
             intents=detected_intents,
             assistant_response=response_text,
         )
+        if handoff_id is not None:
+            analytics_service.record("handoff:speak_to_agent")
+
+    analytics_service.log_event(
+        "assist",
+        intents=detected_intents,
+        kb_score=kb_score,
+        llm=True,
+        tts_engine=tts_engine,
+        handoff=handoff_id is not None,
+        ticket_id=handoff_id,
+    )
 
     return {
         "response": response_text,
@@ -388,6 +412,13 @@ def assist_agent(request: AssistRequest):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/stats", dependencies=[Depends(require_admin)])
+def stats():
+    """Process-local usage aggregates (reset on restart)."""
+    kb: KnowledgeBase = app.state.knowledge_base
+    return {"counters": analytics_service.snapshot(), "kb_count": kb.count}
 
 
 class KBEntryRequest(BaseModel):
