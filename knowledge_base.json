@@ -21,7 +21,7 @@
   },
   {
     "id": "cf4b8d28",
-    "question": "How do I get a refund?",
+    "question": "How do I get a refund or my money back?",
     "response": "Refunds are available within 30 days of purchase. Go to 'Order History', select the order, and click 'Request Refund'. Approved refunds arrive in 5-7 business days."
   },
   {
@@ -78,5 +78,10 @@
     "id": "2cab7ccc",
     "question": "What are your business hours?",
     "response": "Automated support is available 24/7. Live agents are available Monday to Friday, 9 AM to 6 PM in your local time zone, and Saturday, 10 AM to 2 PM."
+  },
+  {
+    "id": "36312af1",
+    "question": "Where is my package? Has my delivery arrived?",
+    "response": "Your order status and tracking link are available under 'Order History'. Click 'Track Order' to see real-time carrier updates and the estimated delivery date."
   }
 ]

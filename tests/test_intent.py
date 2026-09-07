@@ -43,3 +43,25 @@ def test_detect_intents_returns_all():
 
 def test_detect_intents_empty_for_gibberish():
     assert detect_intents("quantum pineapple submarine") == []
+
+
+def test_prefix_forms_still_match():
+    # Left-boundary matching keeps verb/plural forms users actually say.
+    assert detect_intent("the app keeps crashing") == "technical_issue"
+    assert detect_intent("the app crashed again") == "technical_issue"
+    assert detect_intent("I forgot my passwords") == "password_reset"
+    assert detect_intent("tracking my order") == "track_order"
+    assert detect_intent("order was cancelled") == "cancel_order"
+
+
+def test_no_match_inside_longer_word():
+    # "unlocked" is the opposite of locked; "rebalance" is not a balance query.
+    assert detect_intent("how do I get my account unlocked") == "unknown"
+    assert detect_intent("help me rebalance my portfolio") == "unknown"
+    assert "account_locked" not in detect_intents("how do I get my account unlocked")
+
+
+def test_email_address_labels_update_email():
+    # "address" is a whole word inside "email address", so both entries match;
+    # dict order (update_email first) must keep the singular label correct.
+    assert detect_intent("change my email address") == "update_email"

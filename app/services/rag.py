@@ -14,6 +14,25 @@ from .. import config
 logger = logging.getLogger(__name__)
 
 
+def _embed_text(question: str, response: str) -> str:
+    """Text actually embedded: question + response.
+
+    User queries ("how do I reset my password?") read like KB questions, not
+    answers, so embedding the response alone misses the closest phrasing.
+    """
+    question = (question or "").strip()
+    response = (response or "").strip()
+    return f"{question}\n{response}" if question else response
+
+
+def _active_embed_texts(entries: list[dict]) -> list[str]:
+    return [
+        _embed_text(e.get("question", ""), e["response"])
+        for e in entries
+        if not e.get("deleted_at")
+    ]
+
+
 class KnowledgeBase:
     def __init__(self) -> None:
         # RLock: nested acquisition by the same thread is safe (plain Lock
@@ -86,23 +105,27 @@ class KnowledgeBase:
         new_active = [e for e in normalized if not e.get("deleted_at")]
 
         with self._lock:
-            # Snapshot old rows by id so unchanged responses keep their vectors.
+            # Snapshot old rows by id so unchanged entries keep their vectors.
             old_rows: dict[str, tuple[str, torch.Tensor]] = {}
             old_active = [e for e in self._entries if not e.get("deleted_at")]
             emb = self._corpus_embeddings
             if emb is not None and emb.numel() > 0:
                 for pos, e in enumerate(old_active):
                     if pos < emb.shape[0]:
-                        old_rows[e["id"]] = (e["response"], emb[pos])
+                        old_rows[e["id"]] = (_embed_text(e.get("question", ""), e["response"]), emb[pos])
             need_idx = [
                 i for i, e in enumerate(new_active)
-                if e["id"] not in old_rows or old_rows[e["id"]][0] != e["response"]
+                if e["id"] not in old_rows
+                or old_rows[e["id"]][0] != _embed_text(e.get("question", ""), e["response"])
             ]
 
-        # Encode only new/changed responses; never hold the lock during encode.
+        # Encode only new/changed entries; never hold the lock during encode.
         fresh: dict[int, torch.Tensor] = {}
         if need_idx:
-            vecs = self._model.encode([new_active[i]["response"] for i in need_idx], convert_to_tensor=True)
+            vecs = self._model.encode(
+                [_embed_text(new_active[i].get("question", ""), new_active[i]["response"]) for i in need_idx],
+                convert_to_tensor=True,
+            )
             for pos, i in enumerate(need_idx):
                 fresh[i] = vecs[pos] if vecs.dim() == 2 else vecs
 
@@ -140,14 +163,13 @@ class KnowledgeBase:
         if not response:
             raise ValueError("'response' must be a non-empty string")
         entry = {"id": uuid.uuid4().hex[:8], "question": question.strip(), "response": response, "deleted_at": None}
-        embedding = self._model.encode(response, convert_to_tensor=True)
+        embedding = self._model.encode(_embed_text(entry["question"], response), convert_to_tensor=True)
         with self._lock:
             self._entries.append(entry)
             # Append to active embeddings
             if self._corpus_embeddings is None or self._corpus_embeddings.numel() == 0:
                 # Rebuild from active to get correct shape
-                active_resp = [e["response"] for e in self._entries if not e.get("deleted_at")]
-                self._corpus_embeddings = self._model.encode(active_resp, convert_to_tensor=True)
+                self._corpus_embeddings = self._model.encode(_active_embed_texts(self._entries), convert_to_tensor=True)
             else:
                 self._corpus_embeddings = torch.cat(
                     [self._corpus_embeddings, embedding.unsqueeze(0)]
@@ -161,7 +183,7 @@ class KnowledgeBase:
         response = response.strip()
         if not response:
             raise ValueError("'response' must be a non-empty string")
-        embedding = self._model.encode(response, convert_to_tensor=True)
+        embedding = self._model.encode(_embed_text(question, response), convert_to_tensor=True)
         with self._lock:
             idx = next((i for i, e in enumerate(self._entries) if e["id"] == entry_id), None)
             if idx is None:
@@ -191,9 +213,9 @@ class KnowledgeBase:
                 return False
             self._entries[idx]["deleted_at"] = datetime.now(timezone.utc).isoformat()
             # Rebuild embeddings without this entry
-            active_responses = [e["response"] for e in self._entries if not e.get("deleted_at")]
-            if active_responses:
-                self._corpus_embeddings = self._model.encode(active_responses, convert_to_tensor=True)
+            active_texts = _active_embed_texts(self._entries)
+            if active_texts:
+                self._corpus_embeddings = self._model.encode(active_texts, convert_to_tensor=True)
             else:
                 # Empty: keep 0-row tensor with correct dim
                 try:
@@ -215,8 +237,7 @@ class KnowledgeBase:
                 return None  # not deleted
             self._entries[idx]["deleted_at"] = None
             # Rebuild embeddings to include restored
-            active_responses = [e["response"] for e in self._entries if not e.get("deleted_at")]
-            self._corpus_embeddings = self._model.encode(active_responses, convert_to_tensor=True)
+            self._corpus_embeddings = self._model.encode(_active_embed_texts(self._entries), convert_to_tensor=True)
             to_save = [dict(e) for e in self._entries]
         _persist(to_save)
         self._touch_mtime()
@@ -266,9 +287,9 @@ class KnowledgeBase:
                 "deleted_at": raw.get("deleted_at"),
             })
         # Only keep active for embeddings, but persist all (including soft-deleted if provided)
-        active_responses = [e["response"] for e in normalized if not e.get("deleted_at")]
-        if active_responses:
-            embeddings = self._model.encode(active_responses, convert_to_tensor=True)
+        active_texts = _active_embed_texts(normalized)
+        if active_texts:
+            embeddings = self._model.encode(active_texts, convert_to_tensor=True)
         else:
             try:
                 dim = self._model.get_sentence_embedding_dimension()

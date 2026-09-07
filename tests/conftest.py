@@ -177,7 +177,7 @@ def rag_environment(monkeypatch, tmp_path):
     dim = len(entries) + 1  # headroom for entries added during tests
     model = FakeSentenceTransformer()
     for i, e in enumerate(entries):
-        model.set_vector(e["response"], i, dim)
+        model.set_vector(rag_module._embed_text(e["question"], e["response"]), i, dim)
     monkeypatch.setattr(rag_module, "SentenceTransformer", lambda name: model)
 
     kb = rag_module.KnowledgeBase()

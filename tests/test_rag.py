@@ -66,7 +66,7 @@ def test_add_entry_persists_and_embeds(rag_environment):
     dim = rag_environment["dim"]
     new_idx = rag_environment["entries"].__len__()
 
-    model.set_vector("new answer text", new_idx, dim)
+    model.set_vector(rag._embed_text("new question", "new answer text"), new_idx, dim)
     created = kb.add_entry("new question", "new answer text")
     assert created["response"] == "new answer text"
     assert kb.count == 4
@@ -154,7 +154,7 @@ def test_reload_if_changed_detects_external_edit(rag_environment):
     kb_path.write_text(json.dumps(new_entries), encoding="utf-8")
     _bump_mtime(kb_path)
 
-    model.set_vector("external answer", new_idx, dim)
+    model.set_vector(rag._embed_text("external", "external answer"), new_idx, dim)
     assert kb.reload_if_changed() is True
     assert kb.count == 4
 
@@ -224,7 +224,7 @@ def test_ids_stable_after_own_write(rag_environment):
     new_idx = rag_environment["entries"].__len__()
 
     before = [e["id"] for e in kb.snapshot()]
-    model.set_vector("own answer", new_idx, dim)
+    model.set_vector(rag._embed_text("own q", "own answer"), new_idx, dim)
     kb.add_entry("own q", "own answer")
     assert kb.reload_if_changed() is False
     after = [e["id"] for e in kb.snapshot()]
@@ -246,7 +246,7 @@ def test_reload_only_reencodes_changed_rows(rag_environment):
     kb_path.write_text(json.dumps(on_disk), encoding="utf-8")
     _bump_mtime(kb_path)
 
-    model.set_vector("see your balance online", 3, dim)
+    model.set_vector(rag._embed_text("check balance", "see your balance online"), 3, dim)
     calls = []
     orig_encode = model.encode
 
@@ -258,8 +258,8 @@ def test_reload_only_reencodes_changed_rows(rag_environment):
     model.encode = recording_encode
     assert kb.reload_if_changed() is True
 
-    # Only the changed response was (re-)encoded; nothing else touched the model.
-    assert calls == ["see your balance online"]
+    # Only the changed entry was (re-)encoded; nothing else touched the model.
+    assert calls == [rag._embed_text("check balance", "see your balance online")]
     # IDs unchanged, and untouched rows kept their exact vectors.
     assert [e["id"] for e in kb.snapshot()] == ids_before
     assert torch.equal(kb._corpus_embeddings[0], old_vectors[0])
@@ -268,6 +268,48 @@ def test_reload_only_reencodes_changed_rows(rag_environment):
     # Retrieval still resolves against the updated text.
     model.set_vector("query balance", 3, dim)
     assert kb.best_match("query balance")[0] == "see your balance online"
+
+
+def test_embed_text_combines_question_and_response():
+    assert rag._embed_text("reset password", "go to login page") == "reset password\ngo to login page"
+    assert rag._embed_text("", "go to login page") == "go to login page"
+    assert rag._embed_text("  reset password  ", "  go to login page  ") == "reset password\ngo to login page"
+
+
+def test_reload_reencodes_on_question_change(rag_environment):
+    kb = rag_environment["kb"]
+    model = rag_environment["model"]
+    dim = rag_environment["dim"]
+    kb_path = rag_environment["kb_path"]
+
+    ids_before = [e["id"] for e in kb.snapshot()]
+    old_vectors = [row.clone() for row in kb._corpus_embeddings]
+
+    # Rewrite the file keeping ids and responses, changing only a question.
+    on_disk = json.loads(kb_path.read_text(encoding="utf-8"))
+    on_disk[0]["question"] = "how do I change my password"
+    kb_path.write_text(json.dumps(on_disk), encoding="utf-8")
+    _bump_mtime(kb_path)
+
+    changed = rag._embed_text("how do I change my password", "go to login page")
+    model.set_vector(changed, 3, dim)
+    calls = []
+    orig_encode = model.encode
+
+    def recording_encode(sentences, convert_to_tensor=False):
+        texts = [sentences] if isinstance(sentences, str) else list(sentences)
+        calls.extend(texts)
+        return orig_encode(sentences, convert_to_tensor=convert_to_tensor)
+
+    model.encode = recording_encode
+    assert kb.reload_if_changed() is True
+
+    # The edited question re-encodes; untouched rows keep their exact vectors.
+    assert calls == [changed]
+    assert [e["id"] for e in kb.snapshot()] == ids_before
+    assert torch.equal(kb._corpus_embeddings[1], old_vectors[1])
+    assert torch.equal(kb._corpus_embeddings[2], old_vectors[2])
+    assert not torch.equal(kb._corpus_embeddings[0], old_vectors[0])
 
 
 def test_reload_skips_encoding_when_nothing_changed(rag_environment):
