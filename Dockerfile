@@ -11,9 +11,11 @@ COPY requirements.txt .
 RUN pip install torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple && \
     pip install -r requirements.txt
 
-COPY . .
-
-RUN useradd -m appuser && mkdir -p /app/.hf_cache /app/static/audio && chown -R appuser:appuser /app
+# Create the user first so COPY can set ownership directly - a later
+# chown -R would duplicate the whole tree in a new layer (~67 MB).
+RUN useradd -m appuser
+COPY --chown=appuser:appuser . .
+RUN mkdir -p /app/.hf_cache /app/static/audio && chown appuser:appuser /app/.hf_cache /app/static/audio
 USER appuser
 
 EXPOSE 8000

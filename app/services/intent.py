@@ -18,10 +18,8 @@ _PATTERNS: dict[str, list["re.Pattern[str]"]] = {
 
 
 def detect_intent(transcript: str) -> str:
-    for intent, patterns in _PATTERNS.items():
-        if any(pattern.search(transcript) for pattern in patterns):
-            return intent
-    return config.UNKNOWN_INTENT
+    matches = detect_intents(transcript)
+    return matches[0] if matches else config.UNKNOWN_INTENT
 
 
 def detect_intents(transcript: str) -> list[str]:

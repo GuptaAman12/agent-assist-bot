@@ -7,8 +7,6 @@ os.environ.setdefault("GROQ_API_KEY", "test-groq-key")
 os.environ.setdefault("ADMIN_TOKEN", "")
 
 import json
-import tempfile
-from pathlib import Path
 
 import pytest
 
@@ -53,7 +51,6 @@ class FakeKnowledgeBase:
             {"id": "e1", "question": "reset password", "response": "context one", "deleted_at": None},
             {"id": "e2", "question": "check balance", "response": "context two", "deleted_at": None},
         ]
-        self.match_result = ("context one", 0.8)
         self.matches_result = [("context one", 0.8), ("context two", 0.6)]
         self._next_id = 100
 

@@ -20,3 +20,4 @@ knowledge_base.log.jsonl
 handoff_queue.jsonl
 analytics.log.jsonl
 hf_cache/
+.opencode/

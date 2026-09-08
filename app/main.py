@@ -2,19 +2,20 @@ import json
 import os
 import secrets
 import tempfile
+import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import config
-from .logging import get_access_logger, set_request_id, setup_logging
+from .logging import get_access_logger, get_request_id, set_request_id, setup_logging
 from .services import analytics as analytics_service
 from .services import handoff as handoff_service
 from .services import llm as llm_service
@@ -91,18 +92,12 @@ def _has_admin_access(request: Request) -> bool:
     if request.headers.get("X-Admin-Token") == config.ADMIN_TOKEN:
         return True
     session_id = request.cookies.get(config.ADMIN_COOKIE_NAME)
-    return session_id in ADMIN_SESSIONS and ADMIN_SESSIONS[session_id] == config.ADMIN_TOKEN
+    return session_id in ADMIN_SESSIONS
 
 
-def require_admin(request: Request, x_admin_token: str | None = Header(default=None)) -> None:
-    if not config.ADMIN_TOKEN:
-        return
-    if x_admin_token == config.ADMIN_TOKEN:
-        return
-    session_id = request.cookies.get(config.ADMIN_COOKIE_NAME)
-    if session_id in ADMIN_SESSIONS and ADMIN_SESSIONS[session_id] == config.ADMIN_TOKEN:
-        return
-    raise HTTPException(status_code=401, detail="Missing or invalid admin token")
+def require_admin(request: Request) -> None:
+    if not _has_admin_access(request):
+        raise HTTPException(status_code=401, detail="Missing or invalid admin token")
 
 
 def get_client_ip(request: Request) -> str:
@@ -117,8 +112,6 @@ def get_client_ip(request: Request) -> str:
 
 def _audit_log(request: Request, action: str, entry_id: str | None = None, extra: dict | None = None) -> None:
     try:
-        from .logging import get_request_id
-
         rid = get_request_id() or request.headers.get("X-Request-ID", "")
         # Admin identity: don't log raw token, just presence
         admin_via = "header" if request.headers.get("X-Admin-Token") == config.ADMIN_TOKEN else ("cookie" if request.cookies.get(config.ADMIN_COOKIE_NAME) in ADMIN_SESSIONS else "open" if not config.ADMIN_TOKEN else "unknown")
@@ -140,10 +133,8 @@ def _audit_log(request: Request, action: str, entry_id: str | None = None, extra
 
 # ---- Rate limiting (per-IP sliding window) ----
 
-import threading as _rate_threading
-
 _rate_buckets: dict[str, list[float]] = {}
-_rate_lock = _rate_threading.Lock()
+_rate_lock = threading.Lock()
 
 
 def check_rate_limit(request: Request) -> None:
@@ -221,7 +212,7 @@ def kb_admin_login(token: str = Form(...)):
     if token != config.ADMIN_TOKEN:
         return HTMLResponse(_login_page(error="Invalid admin token"), status_code=401)
     session_id = secrets.token_urlsafe(24)
-    ADMIN_SESSIONS[session_id] = config.ADMIN_TOKEN
+    ADMIN_SESSIONS[session_id] = True
     response = RedirectResponse("/static/kb.html", status_code=303)
     response.set_cookie(
         config.ADMIN_COOKIE_NAME,

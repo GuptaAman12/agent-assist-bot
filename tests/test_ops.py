@@ -1,3 +1,4 @@
+import os
 import time
 
 from app.services import tts
@@ -8,8 +9,6 @@ def _make_audio(path, age_sec=0):
     path.write_bytes(b"fake-audio")
     if age_sec:
         old = time.time() - age_sec
-        import os
-
         os.utime(path, (old, old))
     return path
 
@@ -82,7 +81,6 @@ def test_prune_max_files_keeps_newest(tts_env, monkeypatch):
     audio_dir = tts_env["static_dir"] / "audio"
     audio_dir.mkdir(exist_ok=True)
     now = time.time()
-    import os
 
     names = []
     for i in range(4):

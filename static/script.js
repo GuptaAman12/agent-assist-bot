@@ -11,9 +11,6 @@ const els = {
   error: document.getElementById('error'),
   stageNote: document.getElementById('stage-note'),
   apiStatus: document.getElementById('api-status'),
-  themeToggle: document.getElementById('theme-toggle'),
-  iconMoon: document.getElementById('icon-moon'),
-  iconSun: document.getElementById('icon-sun'),
   emptyState: document.getElementById('empty-state'),
   resultPanel: document.getElementById('result-panel'),
   transcript: document.getElementById('transcript'),
@@ -409,24 +406,7 @@ els.form.addEventListener('submit', async e => {
   }
 });
 
-function syncThemeIcon() {
-  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-  els.iconMoon.hidden = dark;
-  els.iconSun.hidden = !dark;
-  const label = dark ? 'Switch to light mode' : 'Switch to dark mode';
-  els.themeToggle.setAttribute('aria-label', label);
-  els.themeToggle.title = label;
-}
-
-els.themeToggle.addEventListener('click', () => {
-  const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', next);
-  try { localStorage.setItem('theme', next); } catch {}
-  syncThemeIcon();
-});
-
 checkHealth();
-syncThemeIcon();
 restoreSessionState();
 
 /* Live microphone recording */

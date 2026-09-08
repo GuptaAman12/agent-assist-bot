@@ -16,10 +16,7 @@ const els = {
   addBtn: document.getElementById('kb-add-btn'),
   error: document.getElementById('kb-error'),
   exportBtn: document.getElementById('kb-export-btn'),
-  importFile: document.getElementById('kb-import-file'),
-  themeToggle: document.getElementById('theme-toggle'),
-  iconMoon: document.getElementById('icon-moon'),
-  iconSun: document.getElementById('icon-sun')
+  importFile: document.getElementById('kb-import-file')
 };
 
 let entries = [];
@@ -51,22 +48,6 @@ function clearError() {
   els.error.textContent = '';
   els.error.hidden = true;
 }
-
-function syncThemeIcon() {
-  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-  els.iconMoon.hidden = dark;
-  els.iconSun.hidden = !dark;
-  const label = dark ? 'Switch to light mode' : 'Switch to dark mode';
-  els.themeToggle.setAttribute('aria-label', label);
-  els.themeToggle.title = label;
-}
-
-els.themeToggle.addEventListener('click', () => {
-  const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', next);
-  try { localStorage.setItem('theme', next); } catch {}
-  syncThemeIcon();
-});
 
 function makeInput(className, value, placeholder) {
   const input = document.createElement('input');
@@ -383,5 +364,4 @@ els.importFile.addEventListener('change', async () => {
   }
 });
 
-syncThemeIcon();
 refresh();

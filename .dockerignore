@@ -10,6 +10,10 @@ venv/
 temp.wav
 static/audio/
 audio_sample/
+.opencode/
+hf_cache/
+handoff_queue.jsonl
+analytics.log.jsonl
 Dockerfile
 .dockerignore
 AGENTS.md
