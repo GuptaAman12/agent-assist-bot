@@ -349,3 +349,56 @@ def test_lock_is_reentrant(rag_environment):
     t = threading.Thread(target=nested, daemon=True)
     t.start()
     assert done.wait(timeout=5), "nested lock acquisition deadlocked"
+
+
+def test_hybrid_exact_token_match_when_dense_is_zero(rag_environment):
+    kb = rag_environment["kb"]
+    model = rag_environment["model"]
+    dim = rag_environment["dim"]
+
+    # Add an entry with a distinctive alphanumeric code
+    model.set_zero_vector(rag._embed_text("track order ORD-9421", "package in transit to destination"), dim)
+    kb.add_entry("track order ORD-9421", "package in transit to destination")
+
+    # Query with exact code, but dense model returns zero vector (0.0 similarity)
+    model.set_zero_vector("what is the status of ORD-9421", dim)
+    text, score = kb.best_match("what is the status of ORD-9421")
+
+    assert text == "package in transit to destination"
+    assert score >= 0.45
+
+
+def test_hybrid_bm25_boosts_exact_keyword_over_semantic(rag_environment):
+    kb = rag_environment["kb"]
+    model = rag_environment["model"]
+    dim = rag_environment["dim"]
+
+    # Dense model assigns equal similarity to entry 0 ("reset password") and entry 1 ("check balance")
+    model._vectors["check my online account"] = [1.0, 1.0] + [0.0] * (dim - 2)
+    matches = kb.best_matches("check my online account", k=2)
+
+    assert len(matches) == 2
+    # Entry 1 with exact token "check" must rank first
+    assert matches[0][0] == "check your dashboard"
+    assert matches[0][1] > matches[1][1]
+
+
+def test_hybrid_mutations_update_bm25(rag_environment):
+    kb = rag_environment["kb"]
+    model = rag_environment["model"]
+    dim = rag_environment["dim"]
+
+    # Add entry with code SKU-7788
+    model.set_zero_vector(rag._embed_text("product SKU-7788", "in stock and ready to ship"), dim)
+    entry = kb.add_entry("product SKU-7788", "in stock and ready to ship")
+
+    model.set_zero_vector("where is SKU-7788", dim)
+    assert kb.best_match("where is SKU-7788")[0] == "in stock and ready to ship"
+
+    # Remove entry -> should not match
+    kb.remove_entry(entry["id"])
+    assert kb.best_match("where is SKU-7788")[0] is None
+
+    # Restore entry -> should match again
+    kb.restore_entry(entry["id"])
+    assert kb.best_match("where is SKU-7788")[0] == "in stock and ready to ship"

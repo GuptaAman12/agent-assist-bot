@@ -1,9 +1,12 @@
 import json
 import logging
+import math
 import os
+import re
 import tempfile
 import threading
 import uuid
+from collections import Counter
 from datetime import datetime, timezone
 
 import torch
@@ -33,6 +36,73 @@ def _active_embed_texts(entries: list[dict]) -> list[str]:
     ]
 
 
+def _tokenize(text: str) -> list[str]:
+    """Tokenize query and document strings into lowercase word/code tokens.
+    Preserves alphanumeric codes like ORD-123, ERR-403, and single digits."""
+    return [t for t in re.findall(r"[a-z0-9]+(?:[-_][a-z0-9]+)*", (text or "").lower()) if t]
+
+
+class BM25Index:
+    """Okapi BM25 index over a collection of active document texts."""
+
+    def __init__(self, corpus: list[str], k1: float = 1.5, b: float = 0.75) -> None:
+        self.k1 = k1
+        self.b = b
+        self.corpus_size = len(corpus)
+        self.doc_tokens = [_tokenize(doc) for doc in corpus]
+        self.doc_lens = [len(tokens) for tokens in self.doc_tokens]
+        self.avgdl = sum(self.doc_lens) / self.corpus_size if self.corpus_size > 0 else 1.0
+
+        self.doc_freqs: Counter[str] = Counter()
+        self.term_freqs: list[Counter[str]] = []
+        for tokens in self.doc_tokens:
+            tf = Counter(tokens)
+            self.term_freqs.append(tf)
+            for term in tf:
+                self.doc_freqs[term] += 1
+
+        self.idf: dict[str, float] = {}
+        for term, freq in self.doc_freqs.items():
+            self.idf[term] = math.log(1.0 + (self.corpus_size - freq + 0.5) / (freq + 0.5))
+
+    def score(self, query_tokens: list[str], doc_idx: int) -> float:
+        """Raw BM25 score of a document for query tokens."""
+        if not query_tokens or doc_idx >= self.corpus_size:
+            return 0.0
+        doc_len = self.doc_lens[doc_idx]
+        tf_map = self.term_freqs[doc_idx]
+        score = 0.0
+        len_norm = 1.0 - self.b + self.b * (doc_len / self.avgdl)
+        for term in query_tokens:
+            if term not in tf_map:
+                continue
+            tf = tf_map[term]
+            idf = self.idf.get(term, 0.0)
+            score += idf * (tf * (self.k1 + 1.0)) / (tf + self.k1 * len_norm)
+        return score
+
+    def normalized_scores(self, query: str) -> list[float]:
+        """Compute normalized BM25 scores in [0.0, 1.0] for all documents."""
+        tokens = _tokenize(query)
+        if not tokens or self.corpus_size == 0:
+            return [0.0] * self.corpus_size
+
+        raw_scores = [self.score(tokens, i) for i in range(self.corpus_size)]
+        max_raw = max(raw_scores) if raw_scores else 0.0
+        if max_raw <= 0.0:
+            return [0.0] * self.corpus_size
+
+        matching_terms = [t for t in set(tokens) if t in self.doc_freqs]
+        if not matching_terms:
+            return [0.0] * self.corpus_size
+
+        denom = sum(self.idf.get(t, 0.0) for t in matching_terms)
+        if denom <= 0.0:
+            denom = max_raw
+
+        return [min(1.0, max(0.0, s / denom)) for s in raw_scores]
+
+
 class KnowledgeBase:
     def __init__(self) -> None:
         # RLock: nested acquisition by the same thread is safe (plain Lock
@@ -43,7 +113,13 @@ class KnowledgeBase:
         # All entries including soft-deleted, each dict: {id, question, response, deleted_at}
         self._entries: list[dict] = []
         self._corpus_embeddings = None
+        self._bm25: BM25Index | None = None
         self.reload()
+
+    def _rebuild_bm25(self) -> None:
+        active = [e for e in self._entries if not e.get("deleted_at")]
+        corpus = [_embed_text(e.get("question", ""), e["response"]) for e in active]
+        self._bm25 = BM25Index(corpus)
 
     @property
     def count(self) -> int:
@@ -146,6 +222,7 @@ class KnowledgeBase:
         with self._lock:
             self._entries = normalized
             self._corpus_embeddings = embeddings
+            self._rebuild_bm25()
             self._touch_mtime()
         if migrated:
             # Write the assigned ids back so they are stable across reloads.
@@ -174,6 +251,7 @@ class KnowledgeBase:
                 self._corpus_embeddings = torch.cat(
                     [self._corpus_embeddings, embedding.unsqueeze(0)]
                 )
+            self._rebuild_bm25()
             to_save = [dict(e) for e in self._entries]
         _persist(to_save)
         self._touch_mtime()
@@ -199,6 +277,7 @@ class KnowledgeBase:
                 self._corpus_embeddings[emb_pos] = embedding
             except ValueError:
                 pass
+            self._rebuild_bm25()
             to_save = [dict(e) for e in self._entries]
         _persist(to_save)
         self._touch_mtime()
@@ -223,6 +302,7 @@ class KnowledgeBase:
                     self._corpus_embeddings = torch.empty((0, dim))
                 except Exception:
                     self._corpus_embeddings = torch.empty((0, 384))
+            self._rebuild_bm25()
             to_save = [dict(e) for e in self._entries]
         _persist(to_save)
         self._touch_mtime()
@@ -238,6 +318,7 @@ class KnowledgeBase:
             self._entries[idx]["deleted_at"] = None
             # Rebuild embeddings to include restored
             self._corpus_embeddings = self._model.encode(_active_embed_texts(self._entries), convert_to_tensor=True)
+            self._rebuild_bm25()
             to_save = [dict(e) for e in self._entries]
         _persist(to_save)
         self._touch_mtime()
@@ -251,14 +332,24 @@ class KnowledgeBase:
             embeddings = self._corpus_embeddings
             if embeddings is None or embeddings.numel() == 0 or not active:
                 return []
-            # Copy for thread safety outside lock? Use embeddings under lock
-            # Compute outside lock to avoid blocking? Keep simple: compute inside.
             query_embedding = self._model.encode(query, convert_to_tensor=True)
-            scores = util.pytorch_cos_sim(query_embedding, embeddings)[0]
-            order = sorted(range(scores.numel()), key=lambda i: scores[i].item(), reverse=True)
+            scores_dense = util.pytorch_cos_sim(query_embedding, embeddings)[0]
+            scores_bm25 = self._bm25.normalized_scores(query) if self._bm25 else [0.0] * len(active)
+
+            hybrid_scores = []
+            for i in range(len(active)):
+                s_dense = max(0.0, scores_dense[i].item())
+                s_bm25 = scores_bm25[i] if i < len(scores_bm25) else 0.0
+                if s_bm25 > 0:
+                    score = max(s_dense + 0.35 * s_bm25 * (1.0 - s_dense), s_bm25)
+                else:
+                    score = s_dense
+                hybrid_scores.append(score)
+
+            order = sorted(range(len(hybrid_scores)), key=lambda i: hybrid_scores[i], reverse=True)
             matches = []
             for idx in order:
-                score = scores[idx].item()
+                score = hybrid_scores[idx]
                 if score < config.KB_MIN_SIMILARITY:
                     break
                 matches.append((active[idx]["response"], round(float(score), 4)))
@@ -299,6 +390,7 @@ class KnowledgeBase:
         with self._lock:
             self._entries = normalized
             self._corpus_embeddings = embeddings
+            self._rebuild_bm25()
             to_save = [dict(e) for e in self._entries]
         _persist(to_save)
         self._touch_mtime()
