@@ -77,3 +77,74 @@ def log_no_match(transcript: str, intents: list, from_history: bool = False,
         handoff=handoff_id is not None,
         ticket_id=handoff_id,
     )
+
+
+def get_unmatched_queries(limit: int = 50) -> list[dict]:
+    """Read and aggregate unmatched queries from the analytics log for KB curation.
+    Returns entries sorted by frequency descending, then recency descending."""
+    path = config.ANALYTICS_LOG_PATH
+    try:
+        if not path.exists():
+            return []
+    except Exception:
+        return []
+
+    groups: dict[str, dict] = {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                if rec.get("event") != "no_match":
+                    continue
+                transcript = (rec.get("transcript") or "").strip()
+                if not transcript:
+                    continue
+
+                norm = transcript.lower()
+                ts = rec.get("ts", "")
+                intents = rec.get("intents") or []
+                handoff = bool(rec.get("handoff"))
+                ticket_id = rec.get("ticket_id")
+
+                if norm not in groups:
+                    groups[norm] = {
+                        "transcript": transcript,
+                        "count": 1,
+                        "last_seen": ts,
+                        "intents": set(intents),
+                        "handoff": handoff,
+                        "ticket_id": ticket_id,
+                    }
+                else:
+                    g = groups[norm]
+                    g["count"] += 1
+                    if ts and ts >= g["last_seen"]:
+                        g["last_seen"] = ts
+                        g["transcript"] = transcript
+                        if ticket_id:
+                            g["ticket_id"] = ticket_id
+                    g["intents"].update(intents)
+                    g["handoff"] = g["handoff"] or handoff
+    except Exception as exc:
+        logger.warning("failed to read unmatched queries: %s", exc)
+        return []
+
+    result = [
+        {
+            "transcript": g["transcript"],
+            "count": g["count"],
+            "last_seen": g["last_seen"],
+            "intents": sorted(list(g["intents"])),
+            "handoff": g["handoff"],
+            "ticket_id": g["ticket_id"],
+        }
+        for g in groups.values()
+    ]
+    result.sort(key=lambda x: (x["count"], x["last_seen"]), reverse=True)
+    return result[:limit]

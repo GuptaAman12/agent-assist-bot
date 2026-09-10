@@ -13,7 +13,7 @@
       document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     })();
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=23">
+  <link rel="stylesheet" href="/static/style.css?v=24">
 </head>
 <body>
   <header class="topbar">
@@ -35,6 +35,28 @@
 
   <main class="layout kb-page">
     <p id="kb-error" class="error-banner kb-error kb-error-full" hidden></p>
+    <section class="card kb-stats-bar" aria-label="Usage Overview">
+      <div class="kb-stat-card">
+        <span class="kb-stat-val" id="stat-total">-</span>
+        <span class="kb-stat-lbl">Total Inquiries</span>
+      </div>
+      <div class="kb-stat-card">
+        <span class="kb-stat-val" id="stat-takeover">-</span>
+        <span class="kb-stat-lbl">AI Takeover</span>
+      </div>
+      <div class="kb-stat-card">
+        <span class="kb-stat-val" id="stat-handoff">-</span>
+        <span class="kb-stat-lbl">Human Handoffs</span>
+      </div>
+      <div class="kb-stat-card">
+        <span class="kb-stat-val" id="stat-unmatched">-</span>
+        <span class="kb-stat-lbl">Unmatched Queries</span>
+      </div>
+      <div class="kb-stat-card">
+        <span class="kb-stat-val" id="stat-kb-count">-</span>
+        <span class="kb-stat-lbl">Active Articles</span>
+      </div>
+    </section>
     <section class="card kb-list-card" aria-label="Existing entries">
       <div class="result-head">
         <h2 class="card-title">Entries (<span id="kb-count">0</span>)</h2>
@@ -69,10 +91,18 @@
           <button type="submit" id="kb-add-btn" class="btn-primary" title="Add entry and re-embed immediately">Add entry</button>
         </form>
       </section>
+      <section class="card kb-unmatched-card" aria-label="Needs Answer">
+        <div class="result-head">
+          <h3 class="card-title">Needs Answer (<span id="unmatched-count">0</span>)</h3>
+          <button type="button" id="unmatched-refresh-btn" class="btn-ghost btn-small" title="Refresh unmatched queries">Refresh</button>
+        </div>
+        <p class="kb-hint" style="margin-bottom:8px;">Queries below similarity threshold. Click <strong>+ Use</strong> to draft an answer.</p>
+        <ul id="unmatched-list" class="kb-unmatched-list"></ul>
+      </section>
     </aside>
   </main>
 
   <script src="/static/theme.js?v=1"></script>
-  <script src="/static/kb.js?v=7"></script>
+  <script src="/static/kb.js?v=8"></script>
 </body>
 </html>

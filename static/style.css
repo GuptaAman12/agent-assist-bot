@@ -724,6 +724,99 @@ a { color: var(--accent); }
 .kb-edit-textarea:focus { outline: none; box-shadow: var(--ring); }
 .kb-item .kb-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
 
+/* KB Stats Bar */
+.kb-stats-bar {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  padding: 14px 18px;
+}
+.kb-stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.kb-stat-val {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+.kb-stat-lbl {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+/* KB Unmatched Card */
+.kb-unmatched-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.kb-unmatched-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.kb-unmatched-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+.kb-unmatched-text {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.kb-unmatched-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.kb-unmatched-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+.kb-unmatched-badge.handoff {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.kb-unmatched-badge.in-kb {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.kb-unmatched-empty {
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 12px 0;
+}
+
 @media (max-width: 860px) {
   .layout {
     grid-template-columns: minmax(0, 640px);

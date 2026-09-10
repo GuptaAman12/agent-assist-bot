@@ -16,7 +16,15 @@ const els = {
   addBtn: document.getElementById('kb-add-btn'),
   error: document.getElementById('kb-error'),
   exportBtn: document.getElementById('kb-export-btn'),
-  importFile: document.getElementById('kb-import-file')
+  importFile: document.getElementById('kb-import-file'),
+  statTotal: document.getElementById('stat-total'),
+  statTakeover: document.getElementById('stat-takeover'),
+  statHandoff: document.getElementById('stat-handoff'),
+  statUnmatched: document.getElementById('stat-unmatched'),
+  statKbCount: document.getElementById('stat-kb-count'),
+  unmatchedCount: document.getElementById('unmatched-count'),
+  unmatchedList: document.getElementById('unmatched-list'),
+  unmatchedRefreshBtn: document.getElementById('unmatched-refresh-btn')
 };
 
 let entries = [];
@@ -290,6 +298,7 @@ els.reloadBtn.addEventListener('click', async () => {
     await postJson('/kb/reload', { method: 'POST' });
     offset = 0;
     await refresh();
+    await Promise.all([loadStats(), loadUnmatched()]);
   } catch (err) {
     showError(err.message);
   }
@@ -320,6 +329,7 @@ els.addForm.addEventListener('submit', async e => {
     }
     els.question.value = '';
     els.response.value = '';
+    await Promise.all([loadStats(), loadUnmatched()]);
   } catch (err) {
     showError(err.message);
   } finally {
@@ -357,6 +367,7 @@ els.importFile.addEventListener('change', async () => {
     await postJson('/kb/import', { method: 'POST', body: formData });
     offset = 0;
     await refresh();
+    await Promise.all([loadStats(), loadUnmatched()]);
   } catch (err) {
     showError(err.message);
   } finally {
@@ -364,4 +375,101 @@ els.importFile.addEventListener('change', async () => {
   }
 });
 
+async function loadStats() {
+  try {
+    const res = await fetch('/stats');
+    if (!res.ok) return;
+    const data = await res.json();
+    const c = data.counters || {};
+    const llmCalls = c.llm_calls || 0;
+    const transcribeCalls = c.transcribe_requests || 0;
+    const totalInquiries = Math.max(llmCalls, transcribeCalls);
+    const takeovers = (c['tts:groq-orpheus'] || 0) + (c['tts:gtts-fallback'] || 0);
+    const takeoverPct = llmCalls > 0 ? Math.round((takeovers / llmCalls) * 100) : 0;
+    const handoffs = (c['handoff:no_match'] || 0) + (c['handoff:speak_to_agent'] || 0);
+    const noMatch = c.no_match || 0;
+
+    if (els.statTotal) els.statTotal.textContent = totalInquiries.toLocaleString();
+    if (els.statTakeover) els.statTakeover.textContent = `${takeoverPct}%`;
+    if (els.statHandoff) els.statHandoff.textContent = handoffs.toLocaleString();
+    if (els.statUnmatched) els.statUnmatched.textContent = noMatch.toLocaleString();
+    if (els.statKbCount) els.statKbCount.textContent = (data.kb_count || 0).toLocaleString();
+  } catch (e) {
+    // Stats are non-critical
+  }
+}
+
+async function loadUnmatched() {
+  if (!els.unmatchedList) return;
+  try {
+    const res = await fetch('/kb/unmatched?limit=25');
+    if (!res.ok) return;
+    const data = await res.json();
+    const items = data.unmatched || [];
+    if (els.unmatchedCount) els.unmatchedCount.textContent = data.count || 0;
+    els.unmatchedList.innerHTML = '';
+    if (!items.length) {
+      const li = document.createElement('li');
+      li.className = 'kb-unmatched-empty';
+      li.textContent = 'No unmatched queries recorded yet.';
+      els.unmatchedList.appendChild(li);
+      return;
+    }
+    items.forEach(item => {
+      const li = document.createElement('li');
+      li.className = 'kb-unmatched-item';
+
+      const text = document.createElement('span');
+      text.className = 'kb-unmatched-text';
+      text.textContent = item.transcript;
+      text.title = item.transcript;
+
+      const meta = document.createElement('div');
+      meta.className = 'kb-unmatched-meta';
+
+      if (item.count > 1) {
+        const cnt = document.createElement('span');
+        cnt.className = 'kb-unmatched-badge';
+        cnt.textContent = `${item.count}×`;
+        meta.appendChild(cnt);
+      }
+      if (item.handoff) {
+        const ho = document.createElement('span');
+        ho.className = 'kb-unmatched-badge handoff';
+        ho.textContent = 'Handoff';
+        meta.appendChild(ho);
+      }
+      if (item.in_kb) {
+        const inKb = document.createElement('span');
+        inKb.className = 'kb-unmatched-badge in-kb';
+        inKb.textContent = 'In KB';
+        meta.appendChild(inKb);
+      } else {
+        const useBtn = document.createElement('button');
+        useBtn.type = 'button';
+        useBtn.className = 'btn-ghost btn-small';
+        useBtn.textContent = '+ Use';
+        useBtn.title = 'Copy query into question field';
+        useBtn.addEventListener('click', () => {
+          els.question.value = item.transcript;
+          els.response.focus();
+          els.addForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+        meta.appendChild(useBtn);
+      }
+
+      li.append(text, meta);
+      els.unmatchedList.appendChild(li);
+    });
+  } catch (e) {
+    // Unmatched list is non-critical
+  }
+}
+
+if (els.unmatchedRefreshBtn) {
+  els.unmatchedRefreshBtn.addEventListener('click', () => loadUnmatched());
+}
+
 refresh();
+loadStats();
+loadUnmatched();

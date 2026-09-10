@@ -636,3 +636,43 @@ def test_kb_import_file_upload(client):
     assert r.json()["imported"] == 1
     # Cleanup: restore
     client.post("/kb/import", json=[{"question": "reset password", "response": "context one"}, {"question": "check balance", "response": "context two"}])
+
+
+def test_kb_unmatched_empty_when_no_logs(client):
+    r = client.get("/kb/unmatched")
+    assert r.status_code == 200
+    assert r.json() == {"count": 0, "unmatched": []}
+
+
+def test_kb_unmatched_returns_aggregated_and_in_kb_flag(client, tmp_path, monkeypatch):
+    client.app.state.knowledge_base.matches_result = []
+    monkeypatch.setattr("app.main.handoff_service.create_ticket", lambda **k: "t99")
+
+    # Ask an unmatched question twice
+    client.post("/assist/", json={"transcript": "How do I update card?", "intent": "unknown"})
+    client.post("/assist/", json={"transcript": "how do i update card?", "intent": "unknown"})
+    # Ask another unmatched question that happens to match an existing KB question ("reset password")
+    client.post("/assist/", json={"transcript": "reset password", "intent": "unknown"})
+
+    r = client.get("/kb/unmatched")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["count"] == 2
+    top = data["unmatched"][0]
+    assert top["transcript"].lower() == "how do i update card?"
+    assert top["count"] == 2
+    assert top["in_kb"] is False
+    assert top["handoff"] is True
+
+    second = data["unmatched"][1]
+    assert second["transcript"] == "reset password"
+    assert second["count"] == 1
+    assert second["in_kb"] is True
+
+
+def test_kb_unmatched_requires_token_when_configured(client, monkeypatch):
+    monkeypatch.setattr("app.config.ADMIN_TOKEN", "s3cret")
+    assert client.get("/kb/unmatched").status_code == 401
+    r = client.get("/kb/unmatched", headers={"X-Admin-Token": "s3cret"})
+    assert r.status_code == 200
+    assert "unmatched" in r.json()

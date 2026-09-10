@@ -164,3 +164,28 @@ def test_formatter_keeps_handoff_fields():
     assert out["ticket_id"] == "ticket123"
     assert out["reason"] == "no_match"
     assert out["req_id"] == "abc123"
+
+
+def test_get_unmatched_queries_missing_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(analytics_service.config, "ANALYTICS_LOG_PATH", tmp_path / "nonexistent.jsonl")
+    assert analytics_service.get_unmatched_queries() == []
+
+
+def test_get_unmatched_queries_aggregates_and_sorts(tmp_path, monkeypatch):
+    log_file = tmp_path / "analytics.log.jsonl"
+    monkeypatch.setattr(analytics_service.config, "ANALYTICS_LOG_PATH", log_file)
+
+    # 2 occurrences of "how to reset pin", 1 of "cancel my flight", 1 non-no_match event
+    analytics_service.log_no_match("How to reset PIN", ["password_reset"], handoff_id="h1")
+    analytics_service.log_no_match("how to reset pin", ["password_reset"], handoff_id="h2")
+    analytics_service.log_no_match("cancel my flight", ["cancel_order"])
+    analytics_service.log_event("assist", intents=[])
+
+    items = analytics_service.get_unmatched_queries(limit=10)
+    assert len(items) == 2
+    assert items[0]["transcript"].lower() == "how to reset pin"
+    assert items[0]["count"] == 2
+    assert items[0]["handoff"] is True
+    assert items[0]["ticket_id"] == "h2"
+    assert items[1]["transcript"] == "cancel my flight"
+    assert items[1]["count"] == 1
