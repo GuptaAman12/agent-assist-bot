@@ -112,3 +112,110 @@ def test_webhook_queues_to_disk_after_retries(monkeypatch, tmp_path):
     line = queue_path.read_text(encoding="utf-8").strip().splitlines()[0]
     data = json.loads(line)
     assert data["reason"] == "no_match"
+
+
+def test_get_queued_tickets_empty_and_corrupt(monkeypatch, tmp_path):
+    queue_path = tmp_path / "queue.jsonl"
+    monkeypatch.setattr(handoff.config, "HANDOFF_QUEUE_PATH", queue_path)
+
+    # Missing file returns []
+    assert handoff.get_queued_tickets() == []
+
+    # Corrupt lines are skipped gracefully
+    queue_path.write_text("not json\n{\"ticket_id\": \"t1\", \"reason\": \"no_match\"}\n\n{broken\n", encoding="utf-8")
+    tickets = handoff.get_queued_tickets()
+    assert len(tickets) == 1
+    assert tickets[0]["ticket_id"] == "t1"
+
+
+def test_replay_ticket_success_and_failure(monkeypatch, tmp_path):
+    queue_path = tmp_path / "queue.jsonl"
+    monkeypatch.setattr(handoff.config, "HANDOFF_QUEUE_PATH", queue_path)
+    monkeypatch.setattr(handoff.config, "HANDOFF_WEBHOOK_URL", "https://hooks.example.com/t")
+    monkeypatch.setattr(handoff.config, "HANDOFF_EMAIL_TO", "")
+
+    ticket_data = {"ticket_id": "t1", "reason": "no_match", "transcript": "help"}
+    handoff._queue_to_disk(ticket_data)
+    assert len(handoff.get_queued_tickets()) == 1
+
+    # Replay with delivery failure -> kept in queue
+    def boom(*a, **k):
+        raise RuntimeError("network down")
+
+    monkeypatch.setattr(handoff.requests, "post", boom)
+    res = handoff.replay_ticket("t1")
+    assert res["success"] is False
+    assert res["error"] == "delivery_failed"
+    assert len(handoff.get_queued_tickets()) == 1
+
+    # Replay with delivery success -> removed from queue
+    class FakeResp:
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(handoff.requests, "post", lambda *a, **k: FakeResp())
+    res = handoff.replay_ticket("t1")
+    assert res["success"] is True
+    assert res["remaining"] == 0
+    assert len(handoff.get_queued_tickets()) == 0
+
+
+def test_replay_ticket_not_found(monkeypatch, tmp_path):
+    monkeypatch.setattr(handoff.config, "HANDOFF_QUEUE_PATH", tmp_path / "queue.jsonl")
+    res = handoff.replay_ticket("nonexistent")
+    assert res["success"] is False
+    assert res["error"] == "not_found"
+
+
+def test_replay_all_queued(monkeypatch, tmp_path):
+    queue_path = tmp_path / "queue.jsonl"
+    monkeypatch.setattr(handoff.config, "HANDOFF_QUEUE_PATH", queue_path)
+    monkeypatch.setattr(handoff.config, "HANDOFF_WEBHOOK_URL", "https://hooks.example.com/t")
+
+    handoff._queue_to_disk({"ticket_id": "t1", "reason": "no_match"})
+    handoff._queue_to_disk({"ticket_id": "t2", "reason": "speak_to_agent"})
+    assert len(handoff.get_queued_tickets()) == 2
+
+    # t1 succeeds, t2 fails
+    class FakeResp:
+        def raise_for_status(self):
+            pass
+
+    def partial_post(url, json, **kwargs):
+        if json["ticket_id"] == "t1":
+            return FakeResp()
+        raise RuntimeError("t2 failed")
+
+    monkeypatch.setattr(handoff.requests, "post", partial_post)
+    summary = handoff.replay_all_queued()
+    assert summary["replayed"] == 1
+    assert summary["failed"] == 1
+    assert summary["remaining"] == 1
+
+    remaining = handoff.get_queued_tickets()
+    assert len(remaining) == 1
+    assert remaining[0]["ticket_id"] == "t2"
+
+
+def test_dismiss_ticket(monkeypatch, tmp_path):
+    queue_path = tmp_path / "queue.jsonl"
+    monkeypatch.setattr(handoff.config, "HANDOFF_QUEUE_PATH", queue_path)
+
+    handoff._queue_to_disk({"ticket_id": "t1", "reason": "no_match"})
+    handoff._queue_to_disk({"ticket_id": "t2", "reason": "speak_to_agent"})
+
+    assert handoff.dismiss_ticket("t1") is True
+    assert handoff.dismiss_ticket("t1") is False  # already dismissed
+    remaining = handoff.get_queued_tickets()
+    assert len(remaining) == 1
+    assert remaining[0]["ticket_id"] == "t2"
+
+
+def test_worker_start_stop(monkeypatch):
+    monkeypatch.setattr(handoff.config, "HANDOFF_RETRY_INTERVAL_SEC", 300)
+    handoff.stop_worker()  # ensure clean state
+    handoff.start_worker()
+    assert handoff._worker_thread is not None
+    assert handoff._worker_thread.is_alive()
+    handoff.stop_worker()
+    assert handoff._worker_thread is None

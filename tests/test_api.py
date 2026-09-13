@@ -676,3 +676,111 @@ def test_kb_unmatched_requires_token_when_configured(client, monkeypatch):
     r = client.get("/kb/unmatched", headers={"X-Admin-Token": "s3cret"})
     assert r.status_code == 200
     assert "unmatched" in r.json()
+
+
+def test_handoff_queue_auth(client, monkeypatch):
+    monkeypatch.setattr("app.config.ADMIN_TOKEN", "s3cret")
+    assert client.get("/handoff/queue").status_code == 401
+    assert client.post("/handoff/queue/replay").status_code == 401
+    assert client.delete("/handoff/queue/t1").status_code == 401
+
+    r = client.get("/handoff/queue", headers={"X-Admin-Token": "s3cret"})
+    assert r.status_code == 200
+
+
+def test_handoff_queue_empty(client):
+    r = client.get("/handoff/queue")
+    assert r.status_code == 200
+    assert r.json() == {"count": 0, "tickets": []}
+
+
+def test_handoff_queue_listing_and_pagination(client, monkeypatch):
+    from app.services import handoff as handoff_service
+    handoff_service._queue_to_disk({"ticket_id": "t1", "reason": "no_match"})
+    handoff_service._queue_to_disk({"ticket_id": "t2", "reason": "speak_to_agent"})
+    handoff_service._queue_to_disk({"ticket_id": "t3", "reason": "no_match"})
+
+    r = client.get("/handoff/queue")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["count"] == 3
+    assert len(data["tickets"]) == 3
+    # Newest first
+    assert data["tickets"][0]["ticket_id"] == "t3"
+
+    # Pagination
+    r_page = client.get("/handoff/queue?limit=2&offset=1")
+    assert r_page.status_code == 200
+    paged = r_page.json()
+    assert paged["count"] == 3
+    assert len(paged["tickets"]) == 2
+    assert paged["tickets"][0]["ticket_id"] == "t2"
+
+
+def test_handoff_queue_replay_single(client, monkeypatch):
+    from app.services import handoff as handoff_service
+    handoff_service._queue_to_disk({"ticket_id": "t_rep", "reason": "speak_to_agent"})
+
+    class FakeResp:
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr("app.services.handoff.requests.post", lambda *a, **k: FakeResp())
+    monkeypatch.setattr("app.services.handoff.config.HANDOFF_WEBHOOK_URL", "https://hooks.example.com/t")
+
+    r = client.post("/handoff/queue/replay?ticket_id=t_rep")
+    assert r.status_code == 200
+    res = r.json()
+    assert res["success"] is True
+    assert res["ticket_id"] == "t_rep"
+
+
+def test_handoff_queue_replay_not_found(client):
+    r = client.post("/handoff/queue/replay?ticket_id=nonexistent")
+    assert r.status_code == 404
+
+
+def test_handoff_queue_replay_delivery_failed(client, monkeypatch):
+    from app.services import handoff as handoff_service
+    handoff_service._queue_to_disk({"ticket_id": "t_fail", "reason": "speak_to_agent"})
+
+    def boom(*a, **k):
+        raise RuntimeError("down")
+
+    monkeypatch.setattr("app.services.handoff.requests.post", boom)
+    monkeypatch.setattr("app.services.handoff.config.HANDOFF_WEBHOOK_URL", "https://hooks.example.com/t")
+
+    r = client.post("/handoff/queue/replay?ticket_id=t_fail")
+    assert r.status_code == 502
+
+
+def test_handoff_queue_replay_all(client, monkeypatch):
+    from app.services import handoff as handoff_service
+    handoff_service._queue_to_disk({"ticket_id": "ta1", "reason": "no_match"})
+    handoff_service._queue_to_disk({"ticket_id": "ta2", "reason": "speak_to_agent"})
+
+    class FakeResp:
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr("app.services.handoff.requests.post", lambda *a, **k: FakeResp())
+    monkeypatch.setattr("app.services.handoff.config.HANDOFF_WEBHOOK_URL", "https://hooks.example.com/t")
+
+    r = client.post("/handoff/queue/replay")
+    assert r.status_code == 200
+    res = r.json()
+    assert res["replayed"] >= 2
+    assert res["remaining"] == 0
+
+
+def test_handoff_queue_delete(client):
+    from app.services import handoff as handoff_service
+    handoff_service._queue_to_disk({"ticket_id": "t_del", "reason": "no_match"})
+
+    r = client.delete("/handoff/queue/t_del")
+    assert r.status_code == 200
+    assert r.json() == {"deleted": "t_del"}
+
+    # Second delete returns 404
+    r404 = client.delete("/handoff/queue/t_del")
+    assert r404.status_code == 404

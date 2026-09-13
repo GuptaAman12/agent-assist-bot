@@ -24,7 +24,11 @@ const els = {
   statKbCount: document.getElementById('stat-kb-count'),
   unmatchedCount: document.getElementById('unmatched-count'),
   unmatchedList: document.getElementById('unmatched-list'),
-  unmatchedRefreshBtn: document.getElementById('unmatched-refresh-btn')
+  unmatchedRefreshBtn: document.getElementById('unmatched-refresh-btn'),
+  queueCount: document.getElementById('queue-count'),
+  queueList: document.getElementById('queue-list'),
+  queueRefreshBtn: document.getElementById('queue-refresh-btn'),
+  queueReplayAllBtn: document.getElementById('queue-replay-all-btn')
 };
 
 let entries = [];
@@ -470,6 +474,106 @@ if (els.unmatchedRefreshBtn) {
   els.unmatchedRefreshBtn.addEventListener('click', () => loadUnmatched());
 }
 
+async function loadQueue() {
+  if (!els.queueList) return;
+  try {
+    const res = await fetch('/handoff/queue?limit=25');
+    if (!res.ok) return;
+    const data = await res.json();
+    const items = data.tickets || [];
+    if (els.queueCount) els.queueCount.textContent = data.count || 0;
+    els.queueList.innerHTML = '';
+    if (!items.length) {
+      const li = document.createElement('li');
+      li.className = 'kb-unmatched-empty';
+      li.textContent = 'Queue is empty. No pending handoffs.';
+      els.queueList.appendChild(li);
+      return;
+    }
+    items.forEach(item => {
+      const li = document.createElement('li');
+      li.className = 'kb-unmatched-item';
+
+      const info = document.createElement('div');
+      info.className = 'kb-unmatched-text';
+      const title = document.createElement('strong');
+      title.textContent = `Ticket ${item.ticket_id || 'unknown'} (${item.reason || 'handoff'})`;
+      title.style.display = 'block';
+      title.style.fontSize = '12px';
+      const desc = document.createElement('span');
+      desc.textContent = item.transcript || item.assistant_response || '';
+      desc.title = desc.textContent;
+      info.append(title, desc);
+
+      const meta = document.createElement('div');
+      meta.className = 'kb-unmatched-meta';
+
+      const replayBtn = document.createElement('button');
+      replayBtn.type = 'button';
+      replayBtn.className = 'btn-ghost btn-small';
+      replayBtn.textContent = 'Replay';
+      replayBtn.title = 'Retry sending ticket to webhook';
+      replayBtn.addEventListener('click', async () => {
+        clearError();
+        replayBtn.disabled = true;
+        try {
+          await postJson(`/handoff/queue/replay?ticket_id=${encodeURIComponent(item.ticket_id)}`, { method: 'POST' });
+          await loadQueue();
+        } catch (err) {
+          showError(`Replay failed: ${err.message}`);
+          replayBtn.disabled = false;
+        }
+      });
+
+      const dismissBtn = document.createElement('button');
+      dismissBtn.type = 'button';
+      dismissBtn.className = 'btn-ghost btn-small';
+      dismissBtn.textContent = 'Dismiss';
+      dismissBtn.title = 'Remove ticket from queue';
+      dismissBtn.addEventListener('click', async () => {
+        clearError();
+        dismissBtn.disabled = true;
+        try {
+          await postJson(`/handoff/queue/${encodeURIComponent(item.ticket_id)}`, { method: 'DELETE' });
+          await loadQueue();
+        } catch (err) {
+          showError(`Dismiss failed: ${err.message}`);
+          dismissBtn.disabled = false;
+        }
+      });
+
+      meta.append(replayBtn, dismissBtn);
+      li.append(info, meta);
+      els.queueList.appendChild(li);
+    });
+  } catch (e) {
+    // Queue list is non-critical
+  }
+}
+
+if (els.queueRefreshBtn) {
+  els.queueRefreshBtn.addEventListener('click', () => loadQueue());
+}
+if (els.queueReplayAllBtn) {
+  els.queueReplayAllBtn.addEventListener('click', async () => {
+    clearError();
+    els.queueReplayAllBtn.disabled = true;
+    try {
+      const res = await postJson('/handoff/queue/replay', { method: 'POST' });
+      await loadQueue();
+      if (res.replayed > 0 || res.failed > 0) {
+        showError(`Replayed: ${res.replayed}, Failed: ${res.failed}, Remaining: ${res.remaining}`);
+        setTimeout(() => clearError(), 6000);
+      }
+    } catch (err) {
+      showError(`Replay all failed: ${err.message}`);
+    } finally {
+      els.queueReplayAllBtn.disabled = false;
+    }
+  });
+}
+
 refresh();
 loadStats();
 loadUnmatched();
+loadQueue();

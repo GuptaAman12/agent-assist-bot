@@ -13,7 +13,7 @@
       document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     })();
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=24">
+  <link rel="stylesheet" href="/static/style.css?v=25">
 </head>
 <body>
   <header class="topbar">
@@ -99,10 +99,21 @@
         <p class="kb-hint" style="margin-bottom:8px;">Queries below similarity threshold. Click <strong>+ Use</strong> to draft an answer.</p>
         <ul id="unmatched-list" class="kb-unmatched-list"></ul>
       </section>
+      <section class="card kb-queue-card" aria-label="Handoff Queue">
+        <div class="result-head">
+          <h3 class="card-title">Handoff Queue (<span id="queue-count">0</span>)</h3>
+          <div style="display:flex; gap:6px;">
+            <button type="button" id="queue-replay-all-btn" class="btn-ghost btn-small" title="Replay all queued tickets">Replay All</button>
+            <button type="button" id="queue-refresh-btn" class="btn-ghost btn-small" title="Refresh queue">Refresh</button>
+          </div>
+        </div>
+        <p class="kb-hint" style="margin-bottom:8px;">Tickets queued when delivery failed. Replay after fixing webhook or network.</p>
+        <ul id="queue-list" class="kb-unmatched-list"></ul>
+      </section>
     </aside>
   </main>
 
   <script src="/static/theme.js?v=1"></script>
-  <script src="/static/kb.js?v=8"></script>
+  <script src="/static/kb.js?v=9"></script>
 </body>
 </html>

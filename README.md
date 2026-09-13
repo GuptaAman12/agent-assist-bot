@@ -103,7 +103,7 @@ pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-134 tests cover intent detection (incl. word-boundary behavior), KB hot-reload behavior (threshold, external edits, broken-file fail-open, ID stability, question+response re-embedding, admin auth), TTS stripping/normalization/fallback/pruning, AssemblyAI/Groq error paths, upload guards, handoff retry/queue, rate-limit `Retry-After` + proxy headers, analytics events/counters/`/stats`, audit log, import/export, and the full API surface - all external calls and the embedding model are mocked, so tests run offline and fast. CI runs them on every push (`.github/workflows/ci.yml`).
+156 tests cover intent detection (incl. word-boundary behavior), hybrid retrieval (BM25 + dense semantic search), KB hot-reload behavior (threshold, external edits, broken-file fail-open, ID stability, question+response re-embedding, admin auth), TTS stripping/normalization/fallback/pruning, AssemblyAI/Groq error paths, upload guards, handoff retry/queue/worker, rate-limit `Retry-After` + proxy headers, analytics events/counters/`/stats`, audit log, import/export, and the full API surface - all external calls and the embedding model are mocked, so tests run offline and fast. CI runs them on every push (`.github/workflows/ci.yml`).
 
 ## 🐳 Docker
 
@@ -128,24 +128,25 @@ Keys are passed at runtime via `--env-file` - never baked into the image. First 
 docker run -p 8000:8000 --env-file .env -v hf_cache:/app/.hf_cache agent-assist-bot
 ```
 
-## 📁 Project Structure
+## 📂 Architecture
 
 ```
 app/
-├── config.py              # env vars, paths, model names, intent keywords
-├── main.py                # FastAPI app, routes, lifespan (startup validation)
-├── logging.py             # JSON structured logs + per-request ID
+├── main.py                    # FastAPI routes, lifespan, request_context middleware, guards
+├── config.py                  # single source of truth for env vars and tuning constants
+├── logging.py                 # JSON structured logger + per-request ID contextvar
 └── services/
-    ├── transcription.py   # AssemblyAI upload + polling (with timeout)
-    ├── llm.py             # Groq chat completion
-    ├── rag.py             # knowledge base load + precomputed embeddings
-    ├── intent.py          # keyword-based intent detection
-    ├── handoff.py         # ticket delivery (webhook retry, email, disk queue)
-    └── tts.py             # Groq Orpheus TTS with gTTS fallback
-main.py                    # thin shim so `uvicorn main:app` works
-static/                    # dashboard UI, KB manager page, vendor libs, generated audio
-static/vendor/lame.all.js  # in-browser MP3 encoder for live mic recordings
-knowledge_base.json        # RAG corpus
+    ├── transcription.py       # AssemblyAI upload + polling client (sync)
+    ├── intent.py              # keyword-based intent classifier (first-match-wins)
+    ├── rag.py                 # hot-reloadable knowledge base (BM25 + SentenceTransformers embeddings)
+    ├── llm.py                 # Groq chat client (Llama 3.3 70B Versatile, OpenAI-compatible)
+    ├── tts.py                 # Groq Orpheus TTS client with gTTS fallback + WAV normalizer
+    ├── handoff.py             # webhook & email escalation with queue, worker & retry logic
+    └── analytics.py           # in-memory counters, JSONL event logging & unmatched query tracking
+main.py                        # thin shim so `uvicorn main:app` works
+static/                        # dashboard UI, KB manager page, vendor libs, generated audio
+static/vendor/lame.all.js      # in-browser MP3 encoder for live mic recordings
+knowledge_base.json            # RAG corpus
 ```
 
 ## 🔌 API
@@ -157,6 +158,9 @@ knowledge_base.json        # RAG corpus
 | `GET /health`        | –                           | `{"status": "ok"}`                                           |
 | `GET /stats`         | –                           | `{counters, kb_count}` (process-local usage aggregates)      |
 | `GET /kb/unmatched`  | `?limit`                    | `{count, unmatched: [{transcript, count, last_seen, intents, handoff, ticket_id, in_kb}]}` |
+| `GET /handoff/queue` | `?limit&offset`             | `{count, tickets: [{ticket_id, reason, transcript, ...}]}`  |
+| `POST /handoff/queue/replay` | `?ticket_id`        | `{success, ticket_id, remaining}` or `{replayed, failed, remaining}` |
+| `DELETE /handoff/queue/{id}` | –                   | `{"deleted": ticket_id}`                                     |
 | `GET /kb`            | `?limit&offset&include_deleted` | `{count, entries: [{id, question, response}], limit, offset}` |
 | `GET /kb/export`     | –                           | JSON file download (`Content-Disposition: attachment`)       |
 | `POST /kb`           | `{question?, response}`     | created entry                                                |

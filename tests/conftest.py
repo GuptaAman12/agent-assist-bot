@@ -151,6 +151,7 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setattr(app_config, "AUDIT_LOG_PATH", tmp_path / "knowledge_base.log.jsonl")
     monkeypatch.setattr(app_config, "HANDOFF_QUEUE_PATH", tmp_path / "handoff_queue.jsonl")
     monkeypatch.setattr(app_config, "ANALYTICS_LOG_PATH", tmp_path / "analytics.log.jsonl")
+    monkeypatch.setattr(app_config, "HANDOFF_RETRY_INTERVAL_SEC", 0)
     _clear_rate_limit_state()
     from app.services import analytics as analytics_service
 
