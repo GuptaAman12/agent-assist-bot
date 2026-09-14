@@ -161,13 +161,24 @@ async function checkHealth() {
       if (services[k].status === 'online') onlineCount++;
     });
 
-    els.apiStatus.textContent = 'All systems online';
-    els.apiStatus.className = 'status-pill status-ok';
-    els.apiStatus.title = 'System status (hover to view all services)';
+    const isAllOnline = keys.length > 0 && onlineCount === keys.length;
+    if (isAllOnline) {
+      els.apiStatus.textContent = 'All systems online';
+      els.apiStatus.className = 'status-pill status-ok';
+      els.apiStatus.title = 'All systems online (hover for details)';
+    } else if (onlineCount > 0) {
+      els.apiStatus.textContent = `${onlineCount}/${keys.length} systems online`;
+      els.apiStatus.className = 'status-pill status-degraded';
+      els.apiStatus.title = `${keys.length - onlineCount} system(s) offline (hover for details)`;
+    } else {
+      els.apiStatus.textContent = 'Systems offline';
+      els.apiStatus.className = 'status-pill status-down';
+      els.apiStatus.title = 'All systems offline';
+    }
 
     if (els.statusSummaryBadge) {
       els.statusSummaryBadge.textContent = `${onlineCount}/${keys.length} online`;
-      els.statusSummaryBadge.className = `status-summary-badge ${onlineCount === keys.length ? 'all-ok' : 'has-offline'}`;
+      els.statusSummaryBadge.className = `status-summary-badge ${isAllOnline ? 'all-ok' : 'has-offline'}`;
     }
 
     if (els.serviceList && keys.length) {

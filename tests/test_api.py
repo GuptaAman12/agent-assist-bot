@@ -11,6 +11,7 @@ def test_health(client):
     assert "services" in data
     assert data["services"]["api"]["status"] == "online"
     assert "rag" in data["services"]
+    assert "handoff" in data["services"]
 
 
 def test_request_id_header_present(client):

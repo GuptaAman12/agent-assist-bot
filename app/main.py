@@ -430,15 +430,14 @@ def health():
             "status": "online",
             "description": f"Groq Orpheus ({config.GROQ_TTS_VOICE}) + gTTS",
         },
-        "webhook": {
-            "name": "Handoff Webhook",
-            "status": "online" if bool(config.HANDOFF_WEBHOOK_URL) else "offline",
-            "description": "Webhook escalation dispatch" if config.HANDOFF_WEBHOOK_URL else "Available (not configured)",
-        },
-        "email": {
-            "name": "Handoff Email",
-            "status": "online" if bool(config.HANDOFF_EMAIL_TO) else "offline",
-            "description": f"SMTP {config.SMTP_HOST}:{config.SMTP_PORT}" if config.HANDOFF_EMAIL_TO else "Available (not configured)",
+        "handoff": {
+            "name": "Human Handoff",
+            "status": "online" if bool(config.HANDOFF_WEBHOOK_URL or config.HANDOFF_EMAIL_TO) else "offline",
+            "description": (
+                "Webhook dispatch active" if config.HANDOFF_WEBHOOK_URL
+                else (f"SMTP email active ({config.HANDOFF_EMAIL_TO})" if config.HANDOFF_EMAIL_TO
+                else "Offline (no webhook or email configured)")
+            ),
         },
     }
     return {"status": "ok", "services": services}
