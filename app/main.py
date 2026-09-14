@@ -169,8 +169,8 @@ def _clear_rate_limit_state() -> None:
 
 
 @app.middleware("http")
-async def guard_kb_page(request: Request, call_next):
-    if request.url.path == "/static/kb.html" and not _has_admin_access(request):
+async def guard_admin_pages(request: Request, call_next):
+    if request.url.path in ("/static/kb.html", "/static/analytics.html") and not _has_admin_access(request):
         return HTMLResponse(_login_page())
     return await call_next(request)
 
@@ -287,7 +287,8 @@ def transcribe(file: UploadFile = File(...)):
 
     intent = detect_intent(transcript)
     analytics_service.record("transcribe_requests")
-    analytics_service.log_event("transcribe", intent=intent)
+    analytics_service.record("transcribe_bytes", declared_size)
+    analytics_service.log_event("transcribe", intent=intent, file_size=declared_size)
     return {"transcript": transcript, "intent": intent}
 
 
@@ -377,14 +378,33 @@ def assist_agent(request: AssistRequest):
         if handoff_id is not None:
             analytics_service.record("handoff:speak_to_agent")
 
+    prompt_tokens = getattr(response_text, "prompt_tokens", 0)
+    completion_tokens = getattr(response_text, "completion_tokens", 0)
+    total_tokens = getattr(response_text, "total_tokens", 0)
+    if prompt_tokens == 0:
+        prompt_tokens = max(1, len(context + request.transcript) // 4)
+    if completion_tokens == 0:
+        completion_tokens = max(1, len(response_text) // 4)
+    if total_tokens == 0:
+        total_tokens = prompt_tokens + completion_tokens
+
+    analytics_service.record("tokens:prompt", prompt_tokens)
+    analytics_service.record("tokens:completion", completion_tokens)
+    analytics_service.record("tokens:total", total_tokens)
+
     analytics_service.log_event(
         "assist",
         intents=detected_intents,
         kb_score=kb_score,
         llm=True,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        model=config.GROQ_MODEL,
         tts_engine=tts_engine,
         handoff=handoff_id is not None,
         ticket_id=handoff_id,
+        chars_synthesized=len(response_text) if ai_takeover else 0,
     )
 
     return {
@@ -448,6 +468,12 @@ def stats():
     """Process-local usage aggregates (reset on restart)."""
     kb: KnowledgeBase = app.state.knowledge_base
     return {"counters": analytics_service.snapshot(), "kb_count": kb.count}
+
+
+@app.get("/analytics/summary", dependencies=[Depends(require_admin)])
+def analytics_summary():
+    """Aggregated usage, token consumption, and cost estimates across all services."""
+    return analytics_service.get_analytics_summary()
 
 
 @app.get("/kb/unmatched", dependencies=[Depends(require_admin)])

@@ -7,6 +7,12 @@ class LLMError(Exception):
     pass
 
 
+class LLMResponse(str):
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
+
 # UTF-8 bytes (E2 80 XX) decoded as Latin-1 produce these mojibake sequences.
 _MOJIBAKE_FIXES = {
     "\u0393\u00c7\u00e6": "-",   # em dash
@@ -65,7 +71,13 @@ def generate_response(context: str, query: str, history: list[dict] | None = Non
         raise LLMError(f"Groq API error {res.status_code}: {res.text[:300]}")
 
     try:
-        content = res.json()["choices"][0]["message"]["content"]
-        return _normalize_text(content.strip())
+        data = res.json()
+        content = data["choices"][0]["message"]["content"]
+        usage = data.get("usage") or {}
+        out = LLMResponse(_normalize_text(content.strip()))
+        out.prompt_tokens = int(usage.get("prompt_tokens") or 0)
+        out.completion_tokens = int(usage.get("completion_tokens") or 0)
+        out.total_tokens = int(usage.get("total_tokens") or (out.prompt_tokens + out.completion_tokens))
+        return out
     except (ValueError, KeyError, IndexError) as exc:
         raise LLMError(f"Unexpected Groq response shape: {res.text[:300]}") from exc

@@ -22,7 +22,7 @@ A real-time customer support system that transcribes live audio, detects user in
 - 🖥️ Modern dashboard: light/dark mode, session history that survives page navigation (stored in `sessionStorage`), markdown-rendered responses, live system status pill with service health popover and pulsing indicator, copy-to-clipboard.
 - 📚 Knowledge base manager at `/static/kb.html`: global search (spans all pages), live usage analytics summary, unmatched queries curation feed with 1-click 'Add to KB', inline editing, soft-delete with undo, paginated list (`?limit&offset`), import/export (bulk JSON), reload from disk, live system status indicator.
 - 📝 **Audit log** (`knowledge_base.log.jsonl`): every admin KB write is appended with timestamp, request ID, and admin identity - never blocks the request.
-- 📊 **Usage analytics** (`analytics.log.jsonl` + `GET /stats`): every billable request logs its cost markers (LLM/TTS/handoff use), every below-threshold query is kept for KB curation, and process-local counters (handoffs by reason, takeovers, TTS engines) are served as JSON - all best-effort, never in the request path.
+- 📊 **Usage analytics & cost dashboard** (`analytics.log.jsonl` + `/static/analytics.html` + `GET /analytics/summary`): tracks LLM prompt/completion token usage, voice synthesis character volume, audio transcription duration, RAG match rates, and real-time infrastructure cost estimations across all services with a dedicated analytics dashboard.
 
 ## 🛠️ Tech Stack
 
@@ -157,6 +157,7 @@ knowledge_base.json            # RAG corpus
 | `POST /assist/`      | `{transcript, intent, history?}` JSON | `{response, ai_takeover, source, sources, audio_url, tts_engine, kb_score, handoff, ticket_id}` |
 | `GET /health`        | –                           | `{"status": "ok", "services": {api, rag, transcription, llm, tts, handoff}}` |
 | `GET /stats`         | –                           | `{counters, kb_count}` (process-local usage aggregates)      |
+| `GET /analytics/summary` | –                   | `{totals, llm, transcription, tts, rag, handoff, top_intents, recent_activity}` (usage & cost estimates) |
 | `GET /kb/unmatched`  | `?limit`                    | `{count, unmatched: [{transcript, count, last_seen, intents, handoff, ticket_id, in_kb}]}` |
 | `GET /handoff/queue` | `?limit&offset`             | `{count, tickets: [{ticket_id, reason, transcript, ...}]}`  |
 | `POST /handoff/queue/replay` | `?ticket_id`        | `{success, ticket_id, remaining}` or `{replayed, failed, remaining}` |

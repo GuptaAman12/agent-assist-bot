@@ -189,3 +189,50 @@ def test_get_unmatched_queries_aggregates_and_sorts(tmp_path, monkeypatch):
     assert items[0]["ticket_id"] == "h2"
     assert items[1]["transcript"] == "cancel my flight"
     assert items[1]["count"] == 1
+
+
+def test_get_analytics_summary(tmp_path, monkeypatch):
+    log_file = tmp_path / "analytics.log.jsonl"
+    monkeypatch.setattr(analytics_service.config, "ANALYTICS_LOG_PATH", log_file)
+
+    analytics_service.log_event(
+        "assist",
+        intents=["password_reset"],
+        kb_score=0.85,
+        prompt_tokens=100,
+        completion_tokens=50,
+        total_tokens=150,
+        tts_engine="groq-orpheus",
+        chars_synthesized=120,
+    )
+    analytics_service.log_event(
+        "transcribe",
+        intent="password_reset",
+        file_size=32000,
+    )
+
+    summary = analytics_service.get_analytics_summary()
+    assert summary["totals"]["total_requests"] == 2
+    assert summary["llm"]["calls"] == 1
+    assert summary["llm"]["prompt_tokens"] == 100
+    assert summary["llm"]["completion_tokens"] == 50
+    assert summary["llm"]["total_tokens"] == 150
+    assert summary["llm"]["cost_usd"] > 0
+    assert summary["transcription"]["calls"] == 1
+    assert summary["transcription"]["cost_usd"] > 0
+    assert summary["tts"]["groq_calls"] == 1
+    assert summary["rag"]["matched_queries"] == 1
+    assert len(summary["recent_activity"]) == 2
+
+
+def test_analytics_summary_endpoint(client, tmp_path, monkeypatch):
+    log_file = tmp_path / "analytics.log.jsonl"
+    monkeypatch.setattr(analytics_service.config, "ANALYTICS_LOG_PATH", log_file)
+    analytics_service.log_event("assist", intents=["check_balance"], prompt_tokens=50, completion_tokens=20)
+
+    res = client.get("/analytics/summary")
+    assert res.status_code == 200
+    data = res.json()
+    assert "totals" in data
+    assert "llm" in data
+    assert "recent_activity" in data

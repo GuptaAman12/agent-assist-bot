@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Service Analytics &amp; Usage - Agent Assist</title>
+  <link rel="icon" type="image/png" href="/static/logo.png?v=1">
+  <script>
+    (function () {
+      var t = null;
+      try { t = localStorage.getItem('theme'); } catch (e) {}
+      var dark = t === 'dark' || (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    })();
+  </script>
+  <link rel="stylesheet" href="/static/style.css?v=28">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <img src="/static/logo.png?v=1" alt="" class="brand-logo" />
+      </span>
+      <span class="brand-name">Agent Assist</span>
+      <span class="brand-tag">Analytics</span>
+    </div>
+    <nav class="topbar-actions">
+      <a href="/static/index.html" class="nav-link" title="Open Agent Assist dashboard">Dashboard</a>
+      <a href="/static/kb.html" class="nav-link" title="View and edit knowledge base entries">Knowledge base</a>
+      <a href="/static/analytics.html" class="nav-link active" title="Usage, tokens, and cost tracking">Analytics</a>
+      <div class="system-status-wrapper">
+        <div id="api-status" class="status-pill status-checking" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false" title="System status (hover to view all services)">Checking systems…</div>
+        <div id="status-popover" class="status-popover" role="tooltip">
+          <div class="status-popover-header">
+            <span class="status-popover-title">System Status</span>
+            <span id="status-summary-badge" class="status-summary-badge">Checking…</span>
+          </div>
+          <ul id="service-list" class="service-list">
+            <li class="service-item">
+              <div class="service-info">
+                <span class="service-dot checking"></span>
+                <span class="service-name">Checking services…</span>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <button type="button" id="theme-toggle" class="icon-btn" aria-label="Toggle dark mode" title="Toggle dark / light mode">
+        <svg id="icon-moon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg id="icon-sun" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="6.99" y2="6.99"/><line x1="17.01" y1="17.01" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="6.99" y2="17.01"/><line x1="17.01" y1="6.99" x2="19.07" y2="4.93"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="layout analytics-page">
+    <div class="analytics-header">
+      <div>
+        <h1 class="analytics-title">Service Analytics &amp; Cost Tracking</h1>
+        <p class="analytics-subtitle">Real-time token consumption, LLM usage, voice synthesis, and infrastructure cost estimates.</p>
+      </div>
+      <div class="analytics-controls">
+        <button type="button" id="analytics-refresh-btn" class="btn-ghost btn-small" title="Refresh analytics data">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          Refresh
+        </button>
+        <span id="last-updated" class="analytics-last-updated">Updating…</span>
+      </div>
+    </div>
+
+    <!-- Top KPI Cards -->
+    <section class="analytics-kpi-grid" aria-label="Usage Overview">
+      <div class="card kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-label">Total Estimated Cost</span>
+          <span class="kpi-badge cost-badge">USD</span>
+        </div>
+        <div class="kpi-value" id="kpi-cost">$0.0000</div>
+        <div class="kpi-footer" id="kpi-cost-breakdown">LLM + STT + TTS combined</div>
+      </div>
+
+      <div class="card kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-label">Total LLM Tokens</span>
+          <span class="kpi-badge">Tokens</span>
+        </div>
+        <div class="kpi-value" id="kpi-tokens">0</div>
+        <div class="kpi-footer" id="kpi-tokens-sub">0 in / 0 out</div>
+      </div>
+
+      <div class="card kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-label">Total Requests</span>
+          <span class="kpi-badge">All Time</span>
+        </div>
+        <div class="kpi-value" id="kpi-requests">0</div>
+        <div class="kpi-footer" id="kpi-requests-sub">0 assist, 0 audio</div>
+      </div>
+
+      <div class="card kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-label">RAG Match Rate</span>
+          <span class="kpi-badge success-badge" id="kpi-match-rate-badge">0%</span>
+        </div>
+        <div class="kpi-value" id="kpi-match-rate">0%</div>
+        <div class="kpi-footer" id="kpi-match-sub">Avg similarity: 0.00</div>
+      </div>
+
+      <div class="card kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-label">Human Escalations</span>
+          <span class="kpi-badge warning-badge" id="kpi-escalation-badge">0</span>
+        </div>
+        <div class="kpi-value" id="kpi-escalations">0</div>
+        <div class="kpi-footer" id="kpi-escalation-sub">0.0% escalation rate</div>
+      </div>
+    </section>
+
+    <!-- Service Breakdown Cards -->
+    <section class="analytics-services-grid" aria-label="Services Breakdown">
+      <!-- LLM Service -->
+      <div class="card service-detail-card">
+        <div class="service-card-header">
+          <div class="service-card-title-group">
+            <h2 class="service-card-title">LLM Inference</h2>
+            <span class="service-model-pill" id="llm-model-pill">Groq</span>
+          </div>
+          <span class="service-cost-tag" id="llm-cost-tag">$0.0000</span>
+        </div>
+        
+        <div class="token-meter-container">
+          <div class="token-meter-header">
+            <span>Token Distribution</span>
+            <span id="token-ratio-text">0% prompt / 0% completion</span>
+          </div>
+          <div class="token-meter-bar" aria-hidden="true">
+            <div id="token-meter-prompt" class="token-fill prompt" style="width: 50%;"></div>
+            <div id="token-meter-completion" class="token-fill completion" style="width: 50%;"></div>
+          </div>
+        </div>
+
+        <div class="metric-row">
+          <span class="metric-name">Prompt Tokens (Input)</span>
+          <span class="metric-val" id="llm-prompt-tokens">0</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-name">Completion Tokens (Output)</span>
+          <span class="metric-val" id="llm-completion-tokens">0</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-name">Total Tokens Used</span>
+          <span class="metric-val" id="llm-total-tokens">0</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-name">Average Tokens / Call</span>
+          <span class="metric-val" id="llm-avg-tokens">0.0</span>
+        </div>
+        <div class="metric-row subtle">
+          <span class="metric-name">Rates (Input / Output)</span>
+          <span class="metric-val" id="llm-rates">$0.10 / $0.20 per 1M</span>
+        </div>
+      </div>
+
+      <!-- Speech-to-Text (AssemblyAI) -->
+      <div class="card service-detail-card">
+        <div class="service-card-header">
+          <div class="service-card-title-group">
+            <h2 class="service-card-title">Speech-to-Text</h2>
+            <span class="service-model-pill">AssemblyAI</span>
+          </div>
+          <span class="service-cost-tag" id="stt-cost-tag">$0.0000</span>
+        </div>
+
+        <div class="metric-row">
+          <span class="metric-name">Audio Transcribe Calls</span>
+          <span class="metric-val" id="stt-calls">0</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-name">Estimated Audio Duration</span>
+          <span class="metric-val" id="stt-duration">0.0s</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-name">Total Data Processed</span>
+          <span class="metric-val" id="stt-volume">0 KB</span>
+        </div>
+        <div class="metric-row subtle">
+          <span class="metric-name">Estimated Rate</span>
+          <span class="metric-val" id="stt-rate">$0.37 / hour</span>
+        </div>
+      </div>
+
+      <!-- Voice Synthesis (TTS) -->
+      <div class="card service-detail-card">
+        <div class="service-card-header">
+          <div class="service-card-title-group">
+            <h2 class="service-card-title">Voice Synthesis (TTS)</h2>
+            <span class="service-model-pill">Groq Orpheus + gTTS</span>
+          </div>
+          <span class="service-cost-tag" id="tts-cost-tag">$0.0000</span>
+        </div>
+
+        <div class="metric-row">
+          <span class="metric-name">Groq Orpheus Calls</span>
+          <span class="metric-val" id="tts-groq-calls">0</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-name">gTTS Fallback Calls</span>
+          <span class="metric-val" id="tts-gtts-calls">0</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-name">Characters Synthesized</span>
+          <span class="metric-val" id="tts-chars">0</span>
+        </div>
+        <div class="metric-row subtle">
+          <span class="metric-name">Groq TTS Rate</span>
+          <span class="metric-val" id="tts-rate">$15.00 / 1M chars</span>
+        </div>
+      </div>
+
+      <!-- Knowledge Base & Intent Routing -->
+      <div class="card service-detail-card">
+        <div class="service-card-header">
+          <div class="service-card-title-group">
+            <h2 class="service-card-title">Knowledge Base &amp; Routing</h2>
+            <span class="service-model-pill">all-MiniLM-L6-v2</span>
+          </div>
+          <span class="service-cost-tag free-tag">Local (Free)</span>
+        </div>
+
+        <div class="metric-row">
+          <span class="metric-name">Queries Evaluated</span>
+          <span class="metric-val" id="rag-queries">0</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-name">Semantic Matches</span>
+          <span class="metric-val" id="rag-matches">0</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-name">No-Match Fallbacks</span>
+          <span class="metric-val" id="rag-no-matches">0</span>
+        </div>
+        <div class="top-intents-container">
+          <span class="top-intents-title">Top Detected Topics</span>
+          <div id="top-intents-list" class="top-intents-chips">
+            <span class="no-data-hint">No intent data yet</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Recent Request Activity Table -->
+    <section class="card activity-card" aria-label="Recent Requests">
+      <div class="result-head">
+        <div>
+          <h2 class="card-title">Recent Activity Log</h2>
+          <p class="kb-hint">Latest requests, token usage, engine details, and per-request cost breakdown.</p>
+        </div>
+        <div class="activity-search-wrap">
+          <input type="text" id="activity-filter" placeholder="Filter activity by intent or ID…" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="analytics-table">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Request ID</th>
+              <th>Service</th>
+              <th>Detected Intent</th>
+              <th>Tokens (In / Out)</th>
+              <th>Voice Engine</th>
+              <th>Handoff</th>
+              <th style="text-align:right;">Est. Cost</th>
+            </tr>
+          </thead>
+          <tbody id="activity-tbody">
+            <tr>
+              <td colspan="8" class="empty-table-cell">Loading activity log…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/theme.js?v=28"></script>
+  <script src="/static/analytics.js?v=28"></script>
+</body>
+</html>

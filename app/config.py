@@ -40,6 +40,12 @@ KB_NO_MATCH_RESPONSE = os.getenv(
 )
 MAX_HISTORY_TURNS = int(os.getenv("MAX_HISTORY_TURNS", "5"))
 
+# Estimated cost rates (USD) for analytics
+GROQ_INPUT_COST_PER_1M = float(os.getenv("GROQ_INPUT_COST_PER_1M", "0.10"))
+GROQ_OUTPUT_COST_PER_1M = float(os.getenv("GROQ_OUTPUT_COST_PER_1M", "0.20"))
+ASSEMBLYAI_COST_PER_HOUR = float(os.getenv("ASSEMBLYAI_COST_PER_HOUR", "0.37"))
+GROQ_TTS_COST_PER_1M_CHARS = float(os.getenv("GROQ_TTS_COST_PER_1M_CHARS", "15.00"))
+
 HANDOFF_WEBHOOK_URL = os.getenv("HANDOFF_WEBHOOK_URL", "")
 HANDOFF_EMAIL_TO = os.getenv("HANDOFF_EMAIL_TO", "")
 HANDOFF_EMAIL_FROM = os.getenv("HANDOFF_EMAIL_FROM", "")
