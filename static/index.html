@@ -13,7 +13,10 @@
       document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     })();
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=28">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css?v=60">
 </head>
 <body>
   <header class="topbar">
@@ -95,9 +98,17 @@
 
     <section class="results">
       <div id="empty-state" class="card empty-state">
-        <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" y1="18" x2="12" y2="22"/></svg>
-        <h2>No active interaction</h2>
-        <p>Upload a customer audio file to transcribe it, detect intent, and get an AI-assisted response.</p>
+        <div class="empty-state-icon-wrap" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" y1="18" x2="12" y2="22"/></svg>
+        </div>
+        <h2>AI Agent Ready</h2>
+        <p>Upload a customer audio file or record live. The assistant will transcribe speech, extract customer intent, retrieve knowledge base solutions, and synthesize voice responses.</p>
+        <div class="empty-features">
+          <span class="feature-pill">⚡ Speech-to-Text</span>
+          <span class="feature-pill">🎯 Intent Classification</span>
+          <span class="feature-pill">📚 Knowledge Base RAG</span>
+          <span class="feature-pill">🔊 AI Voice Takeover</span>
+        </div>
       </div>
 
       <div id="result-panel" hidden>
@@ -146,6 +157,6 @@
 
   <script src="/static/vendor/lame.all.js?v=1"></script>
   <script src="/static/theme.js?v=1"></script>
-  <script src="/static/script.js?v=28"></script>
+  <script src="/static/script.js?v=50"></script>
 </body>
 </html>

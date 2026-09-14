@@ -49,6 +49,17 @@
     ragQueries: document.getElementById('rag-queries'),
     ragMatches: document.getElementById('rag-matches'),
     ragNoMatches: document.getElementById('rag-no-matches'),
+    ragMatchRate: document.getElementById('rag-match-rate'),
+    ragSimilarityInfo: document.getElementById('rag-similarity-info'),
+
+    // Handoff
+    handoffTotal: document.getElementById('handoff-total'),
+    handoffRate: document.getElementById('handoff-rate'),
+    handoffReasonAgent: document.getElementById('handoff-reason-agent'),
+    handoffReasonNomatch: document.getElementById('handoff-reason-nomatch'),
+
+    // Intent Routing
+    intentTotalCount: document.getElementById('intent-total-count'),
     topIntentsList: document.getElementById('top-intents-list'),
 
     // Table
@@ -189,20 +200,36 @@
     }
 
     // 5. RAG Card
-    els.ragQueries.textContent = fmtNum(rag.total_queries);
-    els.ragMatches.textContent = fmtNum(rag.matched_queries);
-    els.ragNoMatches.textContent = fmtNum(rag.no_match_queries);
+    if (els.ragQueries) els.ragQueries.textContent = fmtNum(rag.total_queries);
+    if (els.ragMatches) els.ragMatches.textContent = fmtNum(rag.matched_queries);
+    if (els.ragNoMatches) els.ragNoMatches.textContent = fmtNum(rag.no_match_queries);
+    if (els.ragMatchRate) els.ragMatchRate.textContent = `${(rag.match_rate_pct || 0).toFixed(1)}%`;
+    if (els.ragSimilarityInfo) {
+      els.ragSimilarityInfo.textContent = `${(rag.avg_similarity || 0).toFixed(3)} (min ${rag.threshold || 0.45})`;
+    }
 
+    // 6. Escalation & Handoff Card
+    if (els.handoffTotal) els.handoffTotal.textContent = fmtNum(escalations);
+    if (els.handoffRate) els.handoffRate.textContent = `${(handoff.escalation_rate_pct || 0).toFixed(1)}%`;
+    const reasons = handoff.by_reason || {};
+    if (els.handoffReasonAgent) els.handoffReasonAgent.textContent = fmtNum(reasons.speak_to_agent || 0);
+    if (els.handoffReasonNomatch) els.handoffReasonNomatch.textContent = fmtNum(reasons.no_match || 0);
+
+    // 7. Intent Routing Card
     const topIntents = data.top_intents || [];
-    if (topIntents.length) {
-      els.topIntentsList.innerHTML = topIntents.map(item => `
-        <span class="intent-chip">
-          <span class="intent-chip-name">${escapeHtml(item.intent.replace(/_/g, ' '))}</span>
-          <span class="intent-chip-count">${item.count}</span>
-        </span>
-      `).join('');
-    } else {
-      els.topIntentsList.innerHTML = '<span class="no-data-hint">No topic data logged yet</span>';
+    const totalIntents = topIntents.reduce((acc, curr) => acc + (curr.count || 0), 0);
+    if (els.intentTotalCount) els.intentTotalCount.textContent = fmtNum(totalIntents);
+    if (els.topIntentsList) {
+      if (topIntents.length) {
+        els.topIntentsList.innerHTML = topIntents.map(item => `
+          <span class="intent-chip">
+            <span class="intent-chip-name">${escapeHtml(item.intent.replace(/_/g, ' '))}</span>
+            <span class="intent-chip-count">${item.count}</span>
+          </span>
+        `).join('');
+      } else {
+        els.topIntentsList.innerHTML = '<span class="no-data-hint">No topic data logged yet</span>';
+      }
     }
 
     // 6. Activity Table

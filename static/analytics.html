@@ -13,7 +13,10 @@
       document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     })();
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=28">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css?v=60">
 </head>
 <body>
   <header class="topbar">
@@ -52,7 +55,7 @@
     </nav>
   </header>
 
-  <main class="layout analytics-page">
+  <main class="analytics-layout analytics-page">
     <div class="analytics-header">
       <div>
         <h1 class="analytics-title">Service Analytics &amp; Cost Tracking</h1>
@@ -216,11 +219,11 @@
         </div>
       </div>
 
-      <!-- Knowledge Base & Intent Routing -->
+      <!-- Knowledge Base Semantic Search (RAG) -->
       <div class="card service-detail-card">
         <div class="service-card-header">
           <div class="service-card-title-group">
-            <h2 class="service-card-title">Knowledge Base &amp; Routing</h2>
+            <h2 class="service-card-title">Vector Search (RAG)</h2>
             <span class="service-model-pill">all-MiniLM-L6-v2</span>
           </div>
           <span class="service-cost-tag free-tag">Local (Free)</span>
@@ -238,10 +241,66 @@
           <span class="metric-name">No-Match Fallbacks</span>
           <span class="metric-val" id="rag-no-matches">0</span>
         </div>
+        <div class="metric-row">
+          <span class="metric-name">Match Accuracy</span>
+          <span class="metric-val" id="rag-match-rate">0.0%</span>
+        </div>
+        <div class="metric-row subtle">
+          <span class="metric-name">Avg Similarity (Threshold)</span>
+          <span class="metric-val" id="rag-similarity-info">0.000 (min 0.45)</span>
+        </div>
+      </div>
+
+      <!-- Human Escalation & Ticketing -->
+      <div class="card service-detail-card">
+        <div class="service-card-header">
+          <div class="service-card-title-group">
+            <h2 class="service-card-title">Escalation &amp; Handoff</h2>
+            <span class="service-model-pill">Webhook + Queue</span>
+          </div>
+          <span class="service-cost-tag free-tag">Internal (Free)</span>
+        </div>
+
+        <div class="metric-row">
+          <span class="metric-name">Total Escalation Tickets</span>
+          <span class="metric-val" id="handoff-total">0</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-name">Escalation Rate</span>
+          <span class="metric-val" id="handoff-rate">0.0%</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-name">Customer Asked for Agent</span>
+          <span class="metric-val" id="handoff-reason-agent">0</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-name">Unmatched Knowledge Base</span>
+          <span class="metric-val" id="handoff-reason-nomatch">0</span>
+        </div>
+        <div class="metric-row subtle">
+          <span class="metric-name">Dispatch Mechanism</span>
+          <span class="metric-val">Webhook / SMTP Queue</span>
+        </div>
+      </div>
+
+      <!-- Intent Intelligence & Topic Analytics -->
+      <div class="card service-detail-card">
+        <div class="service-card-header">
+          <div class="service-card-title-group">
+            <h2 class="service-card-title">Topic &amp; Intent Routing</h2>
+            <span class="service-model-pill">Regex Boundary</span>
+          </div>
+          <span class="service-cost-tag free-tag">Real-time (Free)</span>
+        </div>
+
+        <div class="metric-row">
+          <span class="metric-name">Total Intent Detections</span>
+          <span class="metric-val" id="intent-total-count">0</span>
+        </div>
         <div class="top-intents-container">
-          <span class="top-intents-title">Top Detected Topics</span>
+          <span class="top-intents-title">Top Customer Topics</span>
           <div id="top-intents-list" class="top-intents-chips">
-            <span class="no-data-hint">No intent data yet</span>
+            <span class="no-data-hint">No topic data logged yet</span>
           </div>
         </div>
       </div>
@@ -284,6 +343,6 @@
   </main>
 
   <script src="/static/theme.js?v=28"></script>
-  <script src="/static/analytics.js?v=28"></script>
+  <script src="/static/analytics.js?v=65"></script>
 </body>
 </html>
