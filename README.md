@@ -19,8 +19,8 @@ A real-time customer support system that transcribes live audio, detects user in
 - 🤖 AI takeover: automatable intents are answered aloud by a realistic neural voice (**Groq Orpheus**), with automatic gTTS fallback. If a recording mentions **any** automatable intent, the bot takes over and speaks.
 - 🔒 **Rate limiting + auth** on `/transcribe/` and `/assist/` (when `ADMIN_TOKEN` is set) so the credit-burning endpoints can't be abused anonymously. Over-limit responses carry a `Retry-After` header; set `TRUST_PROXY_HEADERS=true` only behind a trusted reverse proxy so limits key off `X-Forwarded-For`.
 - 🧹 **TTS audio pruning** - generated voice files in `static/audio/` are evicted past `AUDIO_TTL_SEC` / `AUDIO_MAX_FILES` (checked at startup and after each synthesis), so the disk can't fill up unattended.
-- 🖥️ Modern dashboard: light/dark mode, session history that survives page navigation (stored in `sessionStorage`), markdown-rendered responses, live API status, copy-to-clipboard.
-- 📚 Knowledge base manager at `/static/kb.html`: global search (spans all pages), live usage analytics summary, unmatched queries curation feed with 1-click 'Add to KB', inline editing, soft-delete with undo, paginated list (`?limit&offset`), import/export (bulk JSON), reload from disk.
+- 🖥️ Modern dashboard: light/dark mode, session history that survives page navigation (stored in `sessionStorage`), markdown-rendered responses, live system status pill with service health popover and pulsing indicator, copy-to-clipboard.
+- 📚 Knowledge base manager at `/static/kb.html`: global search (spans all pages), live usage analytics summary, unmatched queries curation feed with 1-click 'Add to KB', inline editing, soft-delete with undo, paginated list (`?limit&offset`), import/export (bulk JSON), reload from disk, live system status indicator.
 - 📝 **Audit log** (`knowledge_base.log.jsonl`): every admin KB write is appended with timestamp, request ID, and admin identity - never blocks the request.
 - 📊 **Usage analytics** (`analytics.log.jsonl` + `GET /stats`): every billable request logs its cost markers (LLM/TTS/handoff use), every below-threshold query is kept for KB curation, and process-local counters (handoffs by reason, takeovers, TTS engines) are served as JSON - all best-effort, never in the request path.
 
@@ -103,7 +103,7 @@ pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-156 tests cover intent detection (incl. word-boundary behavior), hybrid retrieval (BM25 + dense semantic search), KB hot-reload behavior (threshold, external edits, broken-file fail-open, ID stability, question+response re-embedding, admin auth), TTS stripping/normalization/fallback/pruning, AssemblyAI/Groq error paths, upload guards, handoff retry/queue/worker, rate-limit `Retry-After` + proxy headers, analytics events/counters/`/stats`, audit log, import/export, and the full API surface - all external calls and the embedding model are mocked, so tests run offline and fast. CI runs them on every push (`.github/workflows/ci.yml`).
+155 tests cover intent detection (incl. word-boundary behavior), hybrid retrieval (BM25 + dense semantic search), KB hot-reload behavior (threshold, external edits, broken-file fail-open, ID stability, question+response re-embedding, admin auth), TTS stripping/normalization/fallback/pruning, AssemblyAI/Groq error paths, upload guards, handoff retry/queue, rate-limit `Retry-After` + proxy headers, analytics events/counters/`/stats`, audit log, import/export, and the full API surface - all external calls and the embedding model are mocked, so tests run offline and fast. CI runs them on every push (`.github/workflows/ci.yml`).
 
 ## 🐳 Docker
 
@@ -141,7 +141,7 @@ app/
     ├── rag.py                 # hot-reloadable knowledge base (BM25 + SentenceTransformers embeddings)
     ├── llm.py                 # Groq chat client (Llama 3.3 70B Versatile, OpenAI-compatible)
     ├── tts.py                 # Groq Orpheus TTS client with gTTS fallback + WAV normalizer
-    ├── handoff.py             # webhook & email escalation with queue, worker & retry logic
+    ├── handoff.py             # webhook & email escalation with disk queue & replay logic
     └── analytics.py           # in-memory counters, JSONL event logging & unmatched query tracking
 main.py                        # thin shim so `uvicorn main:app` works
 static/                        # dashboard UI, KB manager page, vendor libs, generated audio
@@ -155,7 +155,7 @@ knowledge_base.json            # RAG corpus
 |----------------------|-----------------------------|--------------------------------------------------------------|
 | `POST /transcribe/`  | multipart audio upload   | `{transcript, intent}`                                       |
 | `POST /assist/`      | `{transcript, intent, history?}` JSON | `{response, ai_takeover, source, sources, audio_url, tts_engine, kb_score, handoff, ticket_id}` |
-| `GET /health`        | –                           | `{"status": "ok"}`                                           |
+| `GET /health`        | –                           | `{"status": "ok", "services": {api, rag, transcription, llm, tts, handoff}}` |
 | `GET /stats`         | –                           | `{counters, kb_count}` (process-local usage aggregates)      |
 | `GET /kb/unmatched`  | `?limit`                    | `{count, unmatched: [{transcript, count, last_seen, intents, handoff, ticket_id, in_kb}]}` |
 | `GET /handoff/queue` | `?limit&offset`             | `{count, tickets: [{ticket_id, reason, transcript, ...}]}`  |
