@@ -42,15 +42,7 @@ async def lifespan(app: FastAPI):
         prune_old_audio()
     except Exception:
         pass  # audio pruning is best-effort; never block startup
-    try:
-        handoff_service.start_worker()
-    except Exception:
-        pass  # background queue worker is best-effort
     yield
-    try:
-        handoff_service.stop_worker()
-    except Exception:
-        pass
 
 
 app = FastAPI(title="Agent Assist & Resolution Bot", lifespan=lifespan)
@@ -410,7 +402,46 @@ def assist_agent(request: AssistRequest):
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    kb: KnowledgeBase | None = getattr(app.state, "knowledge_base", None)
+    kb_count = kb.count if kb else 0
+    services = {
+        "api": {
+            "name": "API Server",
+            "status": "online",
+            "description": "FastAPI core service",
+        },
+        "rag": {
+            "name": "Knowledge Base (RAG)",
+            "status": "online" if kb_count > 0 else "offline",
+            "description": f"{kb_count} entries indexed",
+        },
+        "transcription": {
+            "name": "Speech Transcription",
+            "status": "online" if bool(config.ASSEMBLYAI_API_KEY) else "offline",
+            "description": "AssemblyAI engine",
+        },
+        "llm": {
+            "name": "LLM Inference",
+            "status": "online" if bool(config.GROQ_API_KEY) else "offline",
+            "description": f"Groq ({config.GROQ_MODEL})",
+        },
+        "tts": {
+            "name": "Voice Synthesis (TTS)",
+            "status": "online",
+            "description": f"Groq Orpheus ({config.GROQ_TTS_VOICE}) + gTTS",
+        },
+        "webhook": {
+            "name": "Handoff Webhook",
+            "status": "online" if bool(config.HANDOFF_WEBHOOK_URL) else "offline",
+            "description": "Webhook escalation dispatch" if config.HANDOFF_WEBHOOK_URL else "Available (not configured)",
+        },
+        "email": {
+            "name": "Handoff Email",
+            "status": "online" if bool(config.HANDOFF_EMAIL_TO) else "offline",
+            "description": f"SMTP {config.SMTP_HOST}:{config.SMTP_PORT}" if config.HANDOFF_EMAIL_TO else "Available (not configured)",
+        },
+    }
+    return {"status": "ok", "services": services}
 
 
 @app.get("/stats", dependencies=[Depends(require_admin)])

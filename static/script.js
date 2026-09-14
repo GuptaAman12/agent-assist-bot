@@ -11,6 +11,8 @@ const els = {
   error: document.getElementById('error'),
   stageNote: document.getElementById('stage-note'),
   apiStatus: document.getElementById('api-status'),
+  statusSummaryBadge: document.getElementById('status-summary-badge'),
+  serviceList: document.getElementById('service-list'),
   emptyState: document.getElementById('empty-state'),
   resultPanel: document.getElementById('result-panel'),
   transcript: document.getElementById('transcript'),
@@ -146,15 +148,80 @@ function setBusy(busy) {
 }
 
 async function checkHealth() {
+  if (!els.apiStatus) return;
   try {
     const res = await fetch('/health');
-    if (!res.ok) throw new Error();
-    els.apiStatus.textContent = 'API online';
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const services = data.services || {};
+    const keys = Object.keys(services);
+
+    let onlineCount = 0;
+    keys.forEach(k => {
+      if (services[k].status === 'online') onlineCount++;
+    });
+
+    els.apiStatus.textContent = 'All systems online';
     els.apiStatus.className = 'status-pill status-ok';
-  } catch {
-    els.apiStatus.textContent = 'API offline';
+    els.apiStatus.title = 'System status (hover to view all services)';
+
+    if (els.statusSummaryBadge) {
+      els.statusSummaryBadge.textContent = `${onlineCount}/${keys.length} online`;
+      els.statusSummaryBadge.className = `status-summary-badge ${onlineCount === keys.length ? 'all-ok' : 'has-offline'}`;
+    }
+
+    if (els.serviceList && keys.length) {
+      els.serviceList.innerHTML = keys.map(k => {
+        const s = services[k];
+        const isOnline = s.status === 'online';
+        const cls = isOnline ? 'online' : 'offline';
+        const label = isOnline ? 'Online' : 'Offline';
+        return `<li class="service-item">
+          <div class="service-info">
+            <span class="service-dot ${cls}"></span>
+            <div class="service-text">
+              <span class="service-name">${escapeHtml(s.name || k)}</span>
+              <span class="service-desc">${escapeHtml(s.description || '')}</span>
+            </div>
+          </div>
+          <span class="service-status-pill ${cls}">${label}</span>
+        </li>`;
+      }).join('');
+    }
+  } catch (err) {
+    els.apiStatus.textContent = 'Systems offline';
     els.apiStatus.className = 'status-pill status-down';
+    els.apiStatus.title = 'Backend server offline';
+    if (els.statusSummaryBadge) {
+      els.statusSummaryBadge.textContent = 'Offline';
+      els.statusSummaryBadge.className = 'status-summary-badge has-offline';
+    }
+    if (els.serviceList) {
+      els.serviceList.innerHTML = `<li class="service-item">
+        <div class="service-info">
+          <span class="service-dot offline"></span>
+          <div class="service-text">
+            <span class="service-name">API Server</span>
+            <span class="service-desc">Unreachable</span>
+          </div>
+        </div>
+        <span class="service-status-pill offline">Offline</span>
+      </li>`;
+    }
   }
+}
+
+const statusWrapper = els.apiStatus?.closest('.system-status-wrapper');
+if (statusWrapper) {
+  els.apiStatus.addEventListener('click', (e) => {
+    e.stopPropagation();
+    statusWrapper.classList.toggle('is-open');
+  });
+  document.addEventListener('click', (e) => {
+    if (!statusWrapper.contains(e.target)) {
+      statusWrapper.classList.remove('is-open');
+    }
+  });
 }
 
 function formatBytes(bytes) {

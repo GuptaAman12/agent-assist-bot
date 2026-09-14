@@ -6,7 +6,11 @@ from app.services.transcription import TranscriptionError, TranscriptionTimeout
 def test_health(client):
     r = client.get("/health")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok"}
+    data = r.json()
+    assert data["status"] == "ok"
+    assert "services" in data
+    assert data["services"]["api"]["status"] == "online"
+    assert "rag" in data["services"]
 
 
 def test_request_id_header_present(client):

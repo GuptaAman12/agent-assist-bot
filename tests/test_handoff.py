@@ -211,11 +211,4 @@ def test_dismiss_ticket(monkeypatch, tmp_path):
     assert remaining[0]["ticket_id"] == "t2"
 
 
-def test_worker_start_stop(monkeypatch):
-    monkeypatch.setattr(handoff.config, "HANDOFF_RETRY_INTERVAL_SEC", 300)
-    handoff.stop_worker()  # ensure clean state
-    handoff.start_worker()
-    assert handoff._worker_thread is not None
-    assert handoff._worker_thread.is_alive()
-    handoff.stop_worker()
-    assert handoff._worker_thread is None
+

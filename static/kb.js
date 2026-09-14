@@ -28,7 +28,10 @@ const els = {
   queueCount: document.getElementById('queue-count'),
   queueList: document.getElementById('queue-list'),
   queueRefreshBtn: document.getElementById('queue-refresh-btn'),
-  queueReplayAllBtn: document.getElementById('queue-replay-all-btn')
+  queueReplayAllBtn: document.getElementById('queue-replay-all-btn'),
+  apiStatus: document.getElementById('api-status'),
+  statusSummaryBadge: document.getElementById('status-summary-badge'),
+  serviceList: document.getElementById('service-list')
 };
 
 let entries = [];
@@ -474,6 +477,10 @@ if (els.unmatchedRefreshBtn) {
   els.unmatchedRefreshBtn.addEventListener('click', () => loadUnmatched());
 }
 
+function escapeHtml(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 async function loadQueue() {
   if (!els.queueList) return;
   try {
@@ -482,78 +489,49 @@ async function loadQueue() {
     const data = await res.json();
     const items = data.tickets || [];
     if (els.queueCount) els.queueCount.textContent = data.count || 0;
-    els.queueList.innerHTML = '';
     if (!items.length) {
-      const li = document.createElement('li');
-      li.className = 'kb-unmatched-empty';
-      li.textContent = 'Queue is empty. No pending handoffs.';
-      els.queueList.appendChild(li);
+      els.queueList.innerHTML = '<li class="kb-unmatched-empty">Queue is empty. No pending handoffs.</li>';
       return;
     }
-    items.forEach(item => {
-      const li = document.createElement('li');
-      li.className = 'kb-unmatched-item';
-
-      const info = document.createElement('div');
-      info.className = 'kb-unmatched-text';
-      const title = document.createElement('strong');
-      title.textContent = `Ticket ${item.ticket_id || 'unknown'} (${item.reason || 'handoff'})`;
-      title.style.display = 'block';
-      title.style.fontSize = '12px';
-      const desc = document.createElement('span');
-      desc.textContent = item.transcript || item.assistant_response || '';
-      desc.title = desc.textContent;
-      info.append(title, desc);
-
-      const meta = document.createElement('div');
-      meta.className = 'kb-unmatched-meta';
-
-      const replayBtn = document.createElement('button');
-      replayBtn.type = 'button';
-      replayBtn.className = 'btn-ghost btn-small';
-      replayBtn.textContent = 'Replay';
-      replayBtn.title = 'Retry sending ticket to webhook';
-      replayBtn.addEventListener('click', async () => {
-        clearError();
-        replayBtn.disabled = true;
-        try {
-          await postJson(`/handoff/queue/replay?ticket_id=${encodeURIComponent(item.ticket_id)}`, { method: 'POST' });
-          await loadQueue();
-        } catch (err) {
-          showError(`Replay failed: ${err.message}`);
-          replayBtn.disabled = false;
-        }
-      });
-
-      const dismissBtn = document.createElement('button');
-      dismissBtn.type = 'button';
-      dismissBtn.className = 'btn-ghost btn-small';
-      dismissBtn.textContent = 'Dismiss';
-      dismissBtn.title = 'Remove ticket from queue';
-      dismissBtn.addEventListener('click', async () => {
-        clearError();
-        dismissBtn.disabled = true;
-        try {
-          await postJson(`/handoff/queue/${encodeURIComponent(item.ticket_id)}`, { method: 'DELETE' });
-          await loadQueue();
-        } catch (err) {
-          showError(`Dismiss failed: ${err.message}`);
-          dismissBtn.disabled = false;
-        }
-      });
-
-      meta.append(replayBtn, dismissBtn);
-      li.append(info, meta);
-      els.queueList.appendChild(li);
-    });
-  } catch (e) {
-    // Queue list is non-critical
-  }
+    els.queueList.innerHTML = items.map(t => {
+      const id = escapeHtml(t.ticket_id || 'unknown');
+      const text = escapeHtml(t.transcript || t.assistant_response || '');
+      return `<li class="kb-unmatched-item" data-id="${id}">
+        <div class="kb-unmatched-text">
+          <strong style="display:block;font-size:12px;">Ticket ${id} (${escapeHtml(t.reason || 'handoff')})</strong>
+          <span title="${text}">${text}</span>
+        </div>
+        <div class="kb-unmatched-meta">
+          <button type="button" class="btn-ghost btn-small" data-action="replay" title="Retry sending ticket">Replay</button>
+          <button type="button" class="btn-ghost btn-small" data-action="dismiss" title="Remove ticket from queue">Dismiss</button>
+        </div>
+      </li>`;
+    }).join('');
+  } catch (e) {}
 }
 
-if (els.queueRefreshBtn) {
-  els.queueRefreshBtn.addEventListener('click', () => loadQueue());
+if (els.queueList) {
+  els.queueList.addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    const id = btn.closest('[data-id]')?.dataset?.id;
+    if (!id) return;
+    clearError();
+    btn.disabled = true;
+    try {
+      const isReplay = btn.dataset.action === 'replay';
+      const url = isReplay ? `/handoff/queue/replay?ticket_id=${encodeURIComponent(id)}` : `/handoff/queue/${encodeURIComponent(id)}`;
+      await postJson(url, { method: isReplay ? 'POST' : 'DELETE' });
+      await loadQueue();
+    } catch (err) {
+      showError(`${btn.textContent} failed: ${err.message}`);
+      btn.disabled = false;
+    }
+  });
 }
+
+if (els.queueRefreshBtn) els.queueRefreshBtn.addEventListener('click', () => loadQueue());
+
 if (els.queueReplayAllBtn) {
   els.queueReplayAllBtn.addEventListener('click', async () => {
     clearError();
@@ -573,7 +551,86 @@ if (els.queueReplayAllBtn) {
   });
 }
 
+
+async function checkHealth() {
+  if (!els.apiStatus) return;
+  try {
+    const res = await fetch('/health');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const services = data.services || {};
+    const keys = Object.keys(services);
+
+    let onlineCount = 0;
+    keys.forEach(k => {
+      if (services[k].status === 'online') onlineCount++;
+    });
+
+    els.apiStatus.textContent = 'All systems online';
+    els.apiStatus.className = 'status-pill status-ok';
+    els.apiStatus.title = 'System status (hover to view all services)';
+
+    if (els.statusSummaryBadge) {
+      els.statusSummaryBadge.textContent = `${onlineCount}/${keys.length} online`;
+      els.statusSummaryBadge.className = `status-summary-badge ${onlineCount === keys.length ? 'all-ok' : 'has-offline'}`;
+    }
+
+    if (els.serviceList && keys.length) {
+      els.serviceList.innerHTML = keys.map(k => {
+        const s = services[k];
+        const isOnline = s.status === 'online';
+        const cls = isOnline ? 'online' : 'offline';
+        const label = isOnline ? 'Online' : 'Offline';
+        return `<li class="service-item">
+          <div class="service-info">
+            <span class="service-dot ${cls}"></span>
+            <div class="service-text">
+              <span class="service-name">${escapeHtml(s.name || k)}</span>
+              <span class="service-desc">${escapeHtml(s.description || '')}</span>
+            </div>
+          </div>
+          <span class="service-status-pill ${cls}">${label}</span>
+        </li>`;
+      }).join('');
+    }
+  } catch (err) {
+    els.apiStatus.textContent = 'Systems offline';
+    els.apiStatus.className = 'status-pill status-down';
+    els.apiStatus.title = 'Backend server offline';
+    if (els.statusSummaryBadge) {
+      els.statusSummaryBadge.textContent = 'Offline';
+      els.statusSummaryBadge.className = 'status-summary-badge has-offline';
+    }
+    if (els.serviceList) {
+      els.serviceList.innerHTML = `<li class="service-item">
+        <div class="service-info">
+          <span class="service-dot offline"></span>
+          <div class="service-text">
+            <span class="service-name">API Server</span>
+            <span class="service-desc">Unreachable</span>
+          </div>
+        </div>
+        <span class="service-status-pill offline">Offline</span>
+      </li>`;
+    }
+  }
+}
+
+const statusWrapper = els.apiStatus?.closest('.system-status-wrapper');
+if (statusWrapper) {
+  els.apiStatus.addEventListener('click', (e) => {
+    e.stopPropagation();
+    statusWrapper.classList.toggle('is-open');
+  });
+  document.addEventListener('click', (e) => {
+    if (!statusWrapper.contains(e.target)) {
+      statusWrapper.classList.remove('is-open');
+    }
+  });
+}
+
 refresh();
 loadStats();
 loadUnmatched();
 loadQueue();
+checkHealth();

@@ -123,26 +123,282 @@ a { color: var(--accent); }
 }
 .nav-link:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 
-.status-pill {
+/* System Status Dropdown & Tinkering Dot */
+
+.system-status-wrapper {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+}
+
+.status-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 12.5px;
   font-weight: 600;
   padding: 5px 12px;
   border-radius: 999px;
   border: 1px solid var(--border);
   color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  background: var(--surface);
+  transition: color .15s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease;
 }
+
+.status-pill:hover,
+.system-status-wrapper:hover .status-pill,
+.system-status-wrapper:focus-within .status-pill {
+  box-shadow: var(--shadow);
+}
+
 .status-pill::before {
   content: "";
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: currentColor;
+  flex-shrink: 0;
 }
-.status-ok { color: var(--success); background: var(--success-soft); border-color: transparent; }
-.status-down { color: var(--danger); background: var(--danger-soft); border-color: transparent; }
+
+.status-ok {
+  color: var(--success);
+  background: var(--success-soft);
+  border-color: transparent;
+}
+
+.status-ok::before {
+  animation: status-tinker 2.4s infinite ease-in-out;
+}
+
+@keyframes status-tinker {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.8;
+    box-shadow: 0 0 0 0 rgba(6, 118, 71, 0.7);
+  }
+  30% {
+    transform: scale(1.18);
+    opacity: 1;
+    box-shadow: 0 0 8px 2px rgba(6, 118, 71, 0.5), 0 0 0 3px rgba(6, 118, 71, 0.25);
+  }
+  65% {
+    transform: scale(0.95);
+    opacity: 0.85;
+    box-shadow: 0 0 0 6px rgba(6, 118, 71, 0);
+  }
+  100% {
+    transform: scale(0.9);
+    opacity: 0.8;
+    box-shadow: 0 0 0 0 rgba(6, 118, 71, 0);
+  }
+}
+
+[data-theme="dark"] .status-ok::before {
+  animation-name: status-tinker-dark;
+}
+
+@keyframes status-tinker-dark {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.8;
+    box-shadow: 0 0 0 0 rgba(71, 217, 138, 0.7);
+  }
+  30% {
+    transform: scale(1.18);
+    opacity: 1;
+    box-shadow: 0 0 10px 3px rgba(71, 217, 138, 0.5), 0 0 0 3px rgba(71, 217, 138, 0.3);
+  }
+  65% {
+    transform: scale(0.95);
+    opacity: 0.85;
+    box-shadow: 0 0 0 7px rgba(71, 217, 138, 0);
+  }
+  100% {
+    transform: scale(0.9);
+    opacity: 0.8;
+    box-shadow: 0 0 0 0 rgba(71, 217, 138, 0);
+  }
+}
+
+.status-down {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: transparent;
+}
+
+.status-checking {
+  color: var(--muted);
+  background: var(--surface-2);
+}
+
+.status-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 310px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12), var(--shadow);
+  padding: 12px;
+  z-index: 100;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px);
+  transition: opacity .18s ease, transform .18s ease, visibility .18s ease;
+  pointer-events: none;
+}
+
+[data-theme="dark"] .status-popover {
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border);
+}
+
+.system-status-wrapper:hover .status-popover,
+.system-status-wrapper:focus-within .status-popover,
+.system-status-wrapper.is-open .status-popover {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.status-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.status-popover-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.status-summary-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.status-summary-badge.all-ok {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.status-summary-badge.has-offline {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.service-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.service-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-size: 12px;
+  border: 1px solid transparent;
+  transition: background .12s, border-color .12s;
+}
+
+.service-item:hover {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+.service-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.service-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.service-dot.online {
+  background: var(--success);
+  box-shadow: 0 0 5px rgba(6, 118, 71, 0.4);
+}
+
+[data-theme="dark"] .service-dot.online {
+  box-shadow: 0 0 6px rgba(71, 217, 138, 0.5);
+}
+
+.service-dot.offline {
+  background: var(--danger);
+  box-shadow: 0 0 4px rgba(180, 35, 24, 0.3);
+}
+
+.service-dot.checking {
+  background: var(--muted);
+}
+
+.service-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.service-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.service-desc {
+  font-size: 10.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.service-status-pill {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  margin-left: 8px;
+  text-transform: capitalize;
+}
+
+.service-status-pill.online {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.service-status-pill.offline {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
 
 .icon-btn {
   display: grid;

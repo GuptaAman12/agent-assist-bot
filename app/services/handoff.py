@@ -18,8 +18,6 @@ from ..logging import get_request_id
 logger = logging.getLogger("app.handoff")
 
 _queue_lock = threading.Lock()
-_worker_thread: threading.Thread | None = None
-_worker_stop_event = threading.Event()
 
 
 def create_ticket(
@@ -155,20 +153,19 @@ def _deliver_payload(payload: dict) -> bool:
 
 def _read_queue_file() -> list[dict]:
     """Read all queued tickets from disk. Never raises."""
+    if not config.HANDOFF_QUEUE_PATH.exists():
+        return []
     tickets = []
     try:
-        if config.HANDOFF_QUEUE_PATH.exists():
-            with open(config.HANDOFF_QUEUE_PATH, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        data = json.loads(line)
-                        if isinstance(data, dict):
-                            tickets.append(data)
-                    except Exception:
-                        continue
+        for line in config.HANDOFF_QUEUE_PATH.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    data = json.loads(line)
+                    if isinstance(data, dict):
+                        tickets.append(data)
+                except Exception:
+                    pass
     except Exception as exc:
         logger.warning("failed to read handoff queue", extra={"error": str(exc)})
     return tickets
@@ -191,8 +188,7 @@ def _write_queue_file(tickets: list[dict]) -> None:
 def _queue_to_disk(payload: dict) -> None:
     with _queue_lock:
         try:
-            parent = config.HANDOFF_QUEUE_PATH.parent
-            parent.mkdir(parents=True, exist_ok=True)
+            config.HANDOFF_QUEUE_PATH.parent.mkdir(parents=True, exist_ok=True)
             with open(config.HANDOFF_QUEUE_PATH, "a", encoding="utf-8") as f:
                 f.write(json.dumps(payload, ensure_ascii=False) + "\n")
             logger.info(
@@ -216,20 +212,18 @@ def replay_ticket(ticket_id: str) -> dict:
     """Attempt replay of a specific ticket by id. Removes it on success."""
     with _queue_lock:
         tickets = _read_queue_file()
-        idx = next((i for i, t in enumerate(tickets) if t.get("ticket_id") == ticket_id), None)
-        if idx is None:
+        match = next((t for t in tickets if t.get("ticket_id") == ticket_id), None)
+        if not match:
             return {"success": False, "error": "not_found", "ticket_id": ticket_id}
-        ticket = tickets[idx]
-        delivered = _deliver_payload(ticket)
-        if delivered:
-            tickets.pop(idx)
-            _write_queue_file(tickets)
-            logger.info(
-                "handoff ticket replayed",
-                extra={"ticket_id": ticket_id, "reason": ticket.get("reason")},
-            )
-            return {"success": True, "ticket_id": ticket_id, "remaining": len(tickets)}
-        return {"success": False, "ticket_id": ticket_id, "error": "delivery_failed", "remaining": len(tickets)}
+        if not _deliver_payload(match):
+            return {"success": False, "ticket_id": ticket_id, "error": "delivery_failed", "remaining": len(tickets)}
+        remaining = [t for t in tickets if t.get("ticket_id") != ticket_id]
+        _write_queue_file(remaining)
+        logger.info(
+            "handoff ticket replayed",
+            extra={"ticket_id": ticket_id, "reason": match.get("reason")},
+        )
+        return {"success": True, "ticket_id": ticket_id, "remaining": len(remaining)}
 
 
 def replay_all_queued() -> dict:
@@ -238,20 +232,11 @@ def replay_all_queued() -> dict:
         tickets = _read_queue_file()
         if not tickets:
             return {"replayed": 0, "failed": 0, "remaining": 0}
-        succeeded = []
-        failed = []
-        for t in tickets:
-            if _deliver_payload(t):
-                succeeded.append(t)
-                logger.info(
-                    "handoff ticket replayed",
-                    extra={"ticket_id": t.get("ticket_id"), "reason": t.get("reason")},
-                )
-            else:
-                failed.append(t)
-        if succeeded:
+        failed = [t for t in tickets if not _deliver_payload(t)]
+        replayed = len(tickets) - len(failed)
+        if replayed:
             _write_queue_file(failed)
-        return {"replayed": len(succeeded), "failed": len(failed), "remaining": len(failed)}
+        return {"replayed": replayed, "failed": len(failed), "remaining": len(failed)}
 
 
 def dismiss_ticket(ticket_id: str) -> bool:
@@ -264,39 +249,3 @@ def dismiss_ticket(ticket_id: str) -> bool:
         _write_queue_file(remaining)
         logger.info("handoff ticket dismissed", extra={"ticket_id": ticket_id})
         return True
-
-
-def _worker_loop() -> None:
-    while not _worker_stop_event.is_set():
-        interval = getattr(config, "HANDOFF_RETRY_INTERVAL_SEC", 300)
-        if interval <= 0:
-            break
-        if _worker_stop_event.wait(timeout=interval):
-            break
-        try:
-            if config.HANDOFF_WEBHOOK_URL or config.HANDOFF_EMAIL_TO:
-                replay_all_queued()
-        except Exception as exc:
-            logger.warning("background handoff worker sweep failed", extra={"error": str(exc)})
-
-
-def start_worker() -> None:
-    """Start the periodic background replay worker if enabled."""
-    global _worker_thread
-    interval = getattr(config, "HANDOFF_RETRY_INTERVAL_SEC", 300)
-    if interval <= 0:
-        return
-    if _worker_thread is not None and _worker_thread.is_alive():
-        return
-    _worker_stop_event.clear()
-    _worker_thread = threading.Thread(target=_worker_loop, name="handoff-worker", daemon=True)
-    _worker_thread.start()
-
-
-def stop_worker() -> None:
-    """Stop the periodic background replay worker cleanly."""
-    global _worker_thread
-    _worker_stop_event.set()
-    if _worker_thread is not None and _worker_thread.is_alive():
-        _worker_thread.join(timeout=2.0)
-        _worker_thread = None
