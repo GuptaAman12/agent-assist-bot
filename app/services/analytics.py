@@ -89,7 +89,14 @@ def get_unmatched_queries(limit: int = 50) -> list[dict]:
     except Exception:
         return []
 
-    groups: dict[str, dict] = {}
+    groups: dict[str, dict] = collections.defaultdict(lambda: {
+        "transcript": "",
+        "count": 0,
+        "last_seen": "",
+        "intents": set(),
+        "handoff": False,
+        "ticket_id": None,
+    })
     try:
         with open(path, "r", encoding="utf-8") as f:
             for line in f:
@@ -106,31 +113,16 @@ def get_unmatched_queries(limit: int = 50) -> list[dict]:
                 if not transcript:
                     continue
 
-                norm = transcript.lower()
+                g = groups[transcript.lower()]
+                g["count"] += 1
                 ts = rec.get("ts", "")
-                intents = rec.get("intents") or []
-                handoff = bool(rec.get("handoff"))
-                ticket_id = rec.get("ticket_id")
-
-                if norm not in groups:
-                    groups[norm] = {
-                        "transcript": transcript,
-                        "count": 1,
-                        "last_seen": ts,
-                        "intents": set(intents),
-                        "handoff": handoff,
-                        "ticket_id": ticket_id,
-                    }
-                else:
-                    g = groups[norm]
-                    g["count"] += 1
-                    if ts and ts >= g["last_seen"]:
-                        g["last_seen"] = ts
-                        g["transcript"] = transcript
-                        if ticket_id:
-                            g["ticket_id"] = ticket_id
-                    g["intents"].update(intents)
-                    g["handoff"] = g["handoff"] or handoff
+                if ts >= g["last_seen"]:
+                    g["last_seen"] = ts
+                    g["transcript"] = transcript
+                    if rec.get("ticket_id"):
+                        g["ticket_id"] = rec["ticket_id"]
+                g["intents"].update(rec.get("intents") or [])
+                g["handoff"] = g["handoff"] or bool(rec.get("handoff"))
     except Exception as exc:
         logger.warning("failed to read unmatched queries: %s", exc)
         return []

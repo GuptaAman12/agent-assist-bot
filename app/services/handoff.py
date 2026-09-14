@@ -41,47 +41,22 @@ def create_ticket(
     }
     req_id = get_request_id()
 
-    if config.HANDOFF_WEBHOOK_URL:
+    if config.HANDOFF_WEBHOOK_URL or config.HANDOFF_EMAIL_TO:
         for attempt in range(3):
-            try:
-                res = requests.post(
-                    config.HANDOFF_WEBHOOK_URL,
-                    json=payload,
-                    timeout=config.HANDOFF_TIMEOUT_SEC,
-                )
-                res.raise_for_status()
+            if _deliver_payload(payload):
                 logger.info(
-                    "handoff ticket sent to webhook",
+                    "handoff ticket delivered",
                     extra={"req_id": req_id, "ticket_id": ticket_id, "reason": reason},
                 )
                 return ticket_id
-            except Exception as exc:
-                if attempt < 2:
-                    delay = 0.5 * (2**attempt) + random.uniform(0, 0.5)
-                    time.sleep(delay)
-                    continue
-                logger.warning(
-                    "handoff webhook failed after retries",
-                    extra={"req_id": req_id, "ticket_id": ticket_id, "error": str(exc)},
-                )
-                _queue_to_disk(payload)
-                return None
-
-    if config.HANDOFF_EMAIL_TO:
-        try:
-            _send_email(payload)
-            logger.info(
-                "handoff ticket emailed",
-                extra={"req_id": req_id, "ticket_id": ticket_id, "reason": reason},
-            )
-            return ticket_id
-        except Exception as exc:
-            logger.warning(
-                "handoff email failed",
-                extra={"req_id": req_id, "ticket_id": ticket_id, "error": str(exc)},
-            )
-            _queue_to_disk(payload)
-            return None
+            if attempt < 2:
+                time.sleep(0.5 * (2**attempt) + random.uniform(0, 0.5))
+        logger.warning(
+            "handoff delivery failed after retries",
+            extra={"req_id": req_id, "ticket_id": ticket_id},
+        )
+        _queue_to_disk(payload)
+        return None
 
     # No webhook or email configured: still record the handoff locally.
     logger.info(

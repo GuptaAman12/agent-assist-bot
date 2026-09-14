@@ -1,5 +1,6 @@
 import io
 import re
+import textwrap
 import time
 import uuid
 import wave
@@ -37,29 +38,7 @@ def strip_markdown(text: str) -> str:
 
 
 def _split_chunks(text: str, limit: int) -> list[str]:
-    pieces = re.split(r"(?<=[.!?])\s+", text.strip())
-    chunks: list[str] = []
-    current = ""
-    for piece in pieces:
-        while len(piece) > limit:
-            cut = piece.rfind(" ", 0, limit)
-            cut = cut if cut > 0 else limit
-            if current:
-                chunks.append(current)
-                current = ""
-            chunks.append(piece[:cut].strip())
-            piece = piece[cut:].strip()
-        if not piece:
-            continue
-        candidate = f"{current} {piece}".strip() if current else piece
-        if len(candidate) <= limit:
-            current = candidate
-        else:
-            chunks.append(current)
-            current = piece
-    if current:
-        chunks.append(current)
-    return [c for c in chunks if c] or [text[:limit]]
+    return textwrap.wrap(text, limit, break_long_words=True, break_on_hyphens=False) or [text[:limit]]
 
 
 def _groq_speech(text: str) -> bytes:
