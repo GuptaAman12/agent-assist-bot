@@ -789,3 +789,31 @@ def test_handoff_queue_delete(client):
     # Second delete returns 404
     r404 = client.delete("/handoff/queue/t_del")
     assert r404.status_code == 404
+
+
+def test_get_voices(client):
+    r = client.get("/voices")
+    assert r.status_code == 200
+    data = r.json()
+    assert "default" in data
+    assert "voices" in data
+    assert "troy" in data["voices"]
+    assert "autumn" in data["voices"]
+
+
+def test_assist_with_custom_voice(client, monkeypatch):
+    captured = {}
+
+    def fake_synth(t, voice=None):
+        captured["voice"] = voice
+        return ("out.wav", "groq-orpheus")
+
+    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
+    monkeypatch.setattr("app.main.synthesize", fake_synth)
+    r = client.post(
+        "/assist/",
+        json={"transcript": "reset my password", "intent": "password_reset", "voice": "diana"},
+    )
+    assert r.status_code == 200
+    assert captured["voice"] == "diana"
+

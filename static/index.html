@@ -15,8 +15,8 @@
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=61">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css?v=62">
 </head>
 <body>
   <header class="topbar">
@@ -70,6 +70,20 @@
             <span id="file-name"></span>
             <button type="button" id="file-clear" class="chip-x" aria-label="Remove selected file" title="Remove selected file">&times;</button>
           </div>
+          <div class="voice-selector-wrap">
+            <label for="voice-select" class="voice-select-label">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+              Voice Persona
+            </label>
+            <select id="voice-select" class="voice-select" title="Select AI speech synthesis persona">
+              <option value="troy" selected>Troy &bull; Warm &amp; Clear</option>
+              <option value="autumn">Autumn &bull; Expressive &amp; Friendly</option>
+              <option value="diana">Diana &bull; Professional &amp; Crisp</option>
+              <option value="hannah">Hannah &bull; Natural &amp; Balanced</option>
+              <option value="austin">Austin &bull; Dynamic &amp; Direct</option>
+              <option value="daniel">Daniel &bull; Calm &amp; Authoritative</option>
+            </select>
+          </div>
           <button type="submit" id="submit-btn" class="btn-primary" disabled title="Upload the audio, transcribe it, and generate an AI response">
             <span id="submit-label">Transcribe &amp; assist</span>
             <span id="submit-spinner" class="spinner" hidden></span>
@@ -83,6 +97,7 @@
         <div id="recording-bar" class="recording-bar" hidden>
           <span class="recording-dot" aria-hidden="true"></span>
           <span id="record-timer" class="record-timer">0:00</span>
+          <canvas id="record-visualizer" class="record-visualizer" width="100" height="26" aria-hidden="true"></canvas>
           <button type="button" id="record-stop-btn" class="btn-ghost btn-small">Stop</button>
         </div>
         <div id="error" class="error-banner" hidden></div>
@@ -147,7 +162,21 @@
         </div>
 
         <div class="card result-card" id="audio-card" hidden>
-          <h2 class="card-title">AI voice response</h2>
+          <div class="result-head">
+            <h2 class="card-title">AI voice response</h2>
+            <div class="audio-header-actions">
+              <div class="audio-speed-group" role="group" aria-label="Playback speed">
+                <button type="button" class="speed-btn active" data-speed="1" title="Normal speed (1x)">1x</button>
+                <button type="button" class="speed-btn" data-speed="1.25" title="1.25x speed">1.25x</button>
+                <button type="button" class="speed-btn" data-speed="1.5" title="1.5x speed">1.5x</button>
+                <button type="button" class="speed-btn" data-speed="2" title="2x speed">2x</button>
+              </div>
+              <a id="audio-download-btn" class="btn-ghost btn-small audio-download-btn" download="ai_response.wav" title="Download audio response" target="_blank" rel="noopener">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>Download</span>
+              </a>
+            </div>
+          </div>
           <audio id="audio-player" controls></audio>
           <p id="tts-engine-note" class="engine-note"></p>
         </div>
@@ -157,6 +186,6 @@
 
   <script src="/static/vendor/lame.all.js?v=1"></script>
   <script src="/static/theme.js?v=1"></script>
-  <script src="/static/script.js?v=50"></script>
+  <script src="/static/script.js?v=51"></script>
 </body>
 </html>

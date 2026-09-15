@@ -41,15 +41,16 @@ def _split_chunks(text: str, limit: int) -> list[str]:
     return textwrap.wrap(text, limit, break_long_words=True, break_on_hyphens=False) or [text[:limit]]
 
 
-def _groq_speech(text: str) -> bytes:
+def _groq_speech(text: str, voice: str | None = None) -> bytes:
     headers = {
         "Authorization": f"Bearer {config.GROQ_API_KEY}",
         "Content-Type": "application/json",
     }
+    chosen_voice = voice if (voice and voice in config.ORPHEUS_VOICES) else config.GROQ_TTS_VOICE
     payload = {
         "model": config.GROQ_TTS_MODEL,
         "input": text,
-        "voice": config.GROQ_TTS_VOICE,
+        "voice": chosen_voice,
         "response_format": "wav",
     }
     try:
@@ -89,13 +90,16 @@ def _normalize_wav(parts: list[bytes]) -> bytes:
     return out.getvalue()
 
 
-def synthesize(text: str) -> tuple[str, str]:
+def synthesize(text: str, voice: str | None = None) -> tuple[str, str]:
     clean = strip_markdown(text)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     config.AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 
     try:
-        parts = [_groq_speech(chunk) for chunk in _split_chunks(clean, config.TTS_MAX_INPUT_CHARS)]
+        if voice:
+            parts = [_groq_speech(chunk, voice=voice) for chunk in _split_chunks(clean, config.TTS_MAX_INPUT_CHARS)]
+        else:
+            parts = [_groq_speech(chunk) for chunk in _split_chunks(clean, config.TTS_MAX_INPUT_CHARS)]
         audio = _normalize_wav(parts)
         filename = f"ai_response_{stamp}_{uuid.uuid4().hex[:8]}.wav"
         (config.AUDIO_DIR / filename).write_bytes(audio)

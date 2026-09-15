@@ -31,6 +31,7 @@ GROQ_SPEECH_URL = "https://api.groq.com/openai/v1/audio/speech"
 
 GROQ_TTS_MODEL = os.getenv("GROQ_TTS_MODEL", "canopylabs/orpheus-v1-english")
 GROQ_TTS_VOICE = os.getenv("GROQ_TTS_VOICE", "troy")
+ORPHEUS_VOICES = ["autumn", "diana", "hannah", "austin", "daniel", "troy"]
 TTS_MAX_INPUT_CHARS = 200
 
 KB_MIN_SIMILARITY = float(os.getenv("KB_MIN_SIMILARITY", "0.45"))

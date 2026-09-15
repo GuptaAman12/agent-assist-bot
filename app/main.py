@@ -185,7 +185,10 @@ def _login_page(error: str | None = None) -> str:
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin Login</title>
-<link rel="stylesheet" href="/static/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css?v=62">
 <script>(function(){{var t=null;try{{t=localStorage.getItem('theme')}}catch(e){{}}var d=t==='dark'||(!t&&window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.setAttribute('data-theme',d?'dark':'light')}})();</script>
 </head>
 <body>
@@ -244,6 +247,7 @@ class AssistRequest(BaseModel):
     transcript: str
     intent: str
     history: list[dict] = []
+    voice: str | None = None
 
 
 @app.post("/transcribe/", dependencies=[Depends(require_admin), Depends(check_rate_limit)])
@@ -352,7 +356,10 @@ def assist_agent(request: AssistRequest):
     tts_engine = None
     if ai_takeover:
         try:
-            filename, tts_engine = synthesize(response_text)
+            if request.voice:
+                filename, tts_engine = synthesize(response_text, voice=request.voice)
+            else:
+                filename, tts_engine = synthesize(response_text)
             audio_url = f"/static/audio/{filename}"
         except Exception:
             # TTS (incl. gTTS fallback) must never turn a good answer into a 500.
@@ -417,6 +424,14 @@ def assist_agent(request: AssistRequest):
         "kb_score": kb_score,
         "handoff": handoff_id is not None,
         "ticket_id": handoff_id,
+    }
+
+
+@app.get("/voices")
+def list_voices():
+    return {
+        "default": config.GROQ_TTS_VOICE,
+        "voices": config.ORPHEUS_VOICES,
     }
 
 

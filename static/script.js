@@ -37,7 +37,10 @@ const els = {
   recordLabel: document.getElementById('record-label'),
   recordingBar: document.getElementById('recording-bar'),
   recordTimer: document.getElementById('record-timer'),
-  recordStopBtn: document.getElementById('record-stop-btn')
+  recordStopBtn: document.getElementById('record-stop-btn'),
+  recordVisualizer: document.getElementById('record-visualizer'),
+  voiceSelect: document.getElementById('voice-select'),
+  audioDownloadBtn: document.getElementById('audio-download-btn')
 };
 
 let history = [];
@@ -311,13 +314,28 @@ function showResult(item) {
   if (item.audioUrl) {
     els.audioCard.hidden = false;
     els.audioPlayer.src = item.audioUrl;
+    const voiceName = item.voice || (els.voiceSelect ? els.voiceSelect.value : 'troy');
     els.ttsEngineNote.textContent = item.ttsEngine === 'gtts-fallback'
       ? 'Voice engine: gTTS fallback (Groq Orpheus unavailable - accept terms at console.groq.com to enable it)'
-      : 'Voice engine: Groq Orpheus';
+      : `Voice engine: Groq Orpheus (${voiceName})`;
+
+    // Preserve active playback rate
+    const activeSpeedBtn = document.querySelector('.speed-btn.active');
+    const speed = activeSpeedBtn ? parseFloat(activeSpeedBtn.dataset.speed) || 1 : 1;
+    els.audioPlayer.playbackRate = speed;
+
+    if (els.audioDownloadBtn) {
+      els.audioDownloadBtn.href = item.audioUrl;
+      const safeIntent = (item.intent || 'response').replace(/[^a-zA-Z0-9_-]/g, '_');
+      els.audioDownloadBtn.download = `ai_voice_${safeIntent}.wav`;
+    }
     els.audioPlayer.load();
   } else {
     els.audioCard.hidden = true;
     els.audioPlayer.removeAttribute('src');
+    if (els.audioDownloadBtn) {
+      els.audioDownloadBtn.removeAttribute('href');
+    }
   }
 
   saveSessionState();
@@ -454,10 +472,16 @@ els.form.addEventListener('submit', async e => {
       transcript: h.transcript,
       response: h.responseRaw
     }));
+    const selectedVoice = els.voiceSelect ? els.voiceSelect.value : null;
     const assist = await postJson('/assist/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transcript, intent, history: historyForLlm })
+      body: JSON.stringify({
+        transcript,
+        intent,
+        history: historyForLlm,
+        voice: selectedVoice
+      })
     });
 
     const item = {
@@ -471,6 +495,7 @@ els.form.addEventListener('submit', async e => {
       kbScore: assist.kb_score,
       audioUrl: assist.audio_url || null,
       ttsEngine: assist.tts_engine || null,
+      voice: selectedVoice,
       handoff: !!assist.handoff,
       ticketId: assist.ticket_id || null
     };
@@ -503,6 +528,7 @@ function setRecordingUI(recording) {
   if (!recording) {
     els.recordTimer.textContent = '0:00';
     if (recordTimerId) { clearInterval(recordTimerId); recordTimerId = null; }
+    stopVisualizer();
   }
 }
 
@@ -664,6 +690,7 @@ async function startRecording() {
     showError('Recording failed. Try again or upload a file instead.');
   };
   mediaRecorder.start();
+  startVisualizer(stream);
   recordStartTime = Date.now();
   els.recordTimer.textContent = '0:00';
   recordTimerId = setInterval(() => {
@@ -689,4 +716,116 @@ if (!(navigator.mediaDevices && window.MediaRecorder)) {
   els.recordLabel.textContent = 'Recording not supported';
 } else {
   els.recordBtn.hidden = false;
+}
+
+/* Real-time audio waveform visualizer */
+
+let visualizerAudioCtx = null;
+let visualizerAnalyser = null;
+let visualizerAnimId = null;
+
+function startVisualizer(stream) {
+  const canvas = els.recordVisualizer;
+  if (!canvas) return;
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    visualizerAudioCtx = new AudioCtx();
+    const source = visualizerAudioCtx.createMediaStreamSource(stream);
+    visualizerAnalyser = visualizerAudioCtx.createAnalyser();
+    visualizerAnalyser.fftSize = 64;
+    visualizerAnalyser.smoothingTimeConstant = 0.75;
+    source.connect(visualizerAnalyser);
+
+    const ctx = canvas.getContext('2d');
+    const bufferLength = visualizerAnalyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+
+    function draw() {
+      visualizerAnimId = requestAnimationFrame(draw);
+      visualizerAnalyser.getByteFrequencyData(dataArray);
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const barCount = 12;
+      const barWidth = 4;
+      const gap = 3;
+      const totalW = barCount * (barWidth + gap) - gap;
+      let x = Math.max(0, (canvas.width - totalW) / 2);
+
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
+      for (let i = 0; i < barCount; i++) {
+        const binIndex = Math.min(bufferLength - 1, Math.floor((i / barCount) * (bufferLength * 0.75)));
+        const val = dataArray[binIndex] || 0;
+        const norm = val / 255;
+        const minH = 3;
+        const h = Math.max(minH, Math.round(norm * (canvas.height - 4)));
+        const y = Math.round((canvas.height - h) / 2);
+
+        const grad = ctx.createLinearGradient(0, y, 0, y + h);
+        if (isDark) {
+          grad.addColorStop(0, '#22d3ee');
+          grad.addColorStop(1, '#0ea5e9');
+        } else {
+          grad.addColorStop(0, '#0891b2');
+          grad.addColorStop(1, '#0284c7');
+        }
+
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        if (ctx.roundRect) {
+          ctx.roundRect(x, y, barWidth, h, 2);
+        } else {
+          ctx.rect(x, y, barWidth, h);
+        }
+        ctx.fill();
+
+        x += barWidth + gap;
+      }
+    }
+    draw();
+  } catch (err) {
+    // Non-critical; visualizer should never break recording
+  }
+}
+
+function stopVisualizer() {
+  if (visualizerAnimId) {
+    cancelAnimationFrame(visualizerAnimId);
+    visualizerAnimId = null;
+  }
+  if (visualizerAudioCtx) {
+    try { visualizerAudioCtx.close(); } catch (e) {}
+    visualizerAudioCtx = null;
+  }
+  visualizerAnalyser = null;
+  if (els.recordVisualizer) {
+    const ctx = els.recordVisualizer.getContext('2d');
+    if (ctx) ctx.clearRect(0, 0, els.recordVisualizer.width, els.recordVisualizer.height);
+  }
+}
+
+/* Audio playback speed controls */
+
+document.querySelectorAll('.speed-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const speed = parseFloat(btn.dataset.speed) || 1;
+    if (els.audioPlayer) {
+      els.audioPlayer.playbackRate = speed;
+    }
+    document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
+/* Voice persona selection persistence */
+
+if (els.voiceSelect) {
+  const savedVoice = localStorage.getItem('preferred_voice');
+  if (savedVoice) {
+    els.voiceSelect.value = savedVoice;
+  }
+  els.voiceSelect.addEventListener('change', () => {
+    localStorage.setItem('preferred_voice', els.voiceSelect.value);
+  });
 }

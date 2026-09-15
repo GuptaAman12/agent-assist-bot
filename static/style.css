@@ -1,5 +1,10 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
+
 :root {
   color-scheme: light;
+  --font-display: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --bg: #f4f8fa;
   --bg-ambient:
     radial-gradient(ellipse 90% 55% at 50% -15%, rgba(6, 182, 212, 0.14), transparent 70%),
@@ -82,13 +87,44 @@ body {
   background-image: var(--bg-ambient);
   background-attachment: fixed;
   color: var(--text);
-  font-family: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  font-family: var(--font-body);
   font-size: 15px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   transition: background-color .3s ease, color .3s ease;
   min-height: 100vh;
+}
+
+h1, h2, h3, h4,
+.brand-name,
+.brand-tag,
+.card-title,
+.btn-primary,
+.btn-ghost,
+.nav-link,
+.kpi-value,
+.kpi-label,
+.service-card-title,
+.intent-badge,
+.takeover-pill,
+.status-pill,
+.feature-pill,
+.dropzone-primary,
+.status-popover-title,
+.status-summary-badge,
+.analytics-title {
+  font-family: var(--font-display);
+}
+
+code, pre,
+.record-timer,
+.cell-id code,
+.service-cost-tag,
+.tokens-metric,
+.response-prose code,
+.kb-hint code {
+  font-family: var(--font-mono);
 }
 
 body::before {
@@ -737,6 +773,46 @@ a { color: var(--accent); }
 }
 .chip-x:hover { color: var(--danger); }
 
+.voice-selector-wrap {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.voice-select-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.voice-select-label svg {
+  color: var(--accent);
+}
+.voice-select {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 500;
+  outline: none;
+  transition: all .2s ease;
+  cursor: pointer;
+}
+.voice-select:hover {
+  border-color: var(--border-hover);
+}
+.voice-select:focus {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
 .btn-primary {
   display: inline-flex;
   align-items: center;
@@ -846,8 +922,17 @@ a { color: var(--accent); }
 .record-timer {
   flex: 1;
   font-variant-numeric: tabular-nums;
-  font-family: Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 14px;
+}
+.record-visualizer {
+  display: block;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.04);
+  flex-shrink: 0;
+}
+[data-theme="dark"] .record-visualizer {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .spinner {
@@ -920,7 +1005,7 @@ a { color: var(--accent); }
 }
 .handoff-ticket {
   margin-left: 8px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--warning);
   font-weight: 700;
@@ -1140,7 +1225,7 @@ a { color: var(--accent); }
 .response-prose li { margin-bottom: 6px; }
 .response-prose strong { color: var(--accent); font-weight: 700; }
 .response-prose code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: .9em;
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -1190,6 +1275,50 @@ a { color: var(--accent); }
 #audio-card {
   border-top: 3px solid var(--accent);
 }
+.audio-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.audio-speed-group {
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+.speed-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all .15s ease;
+  line-height: 1.2;
+}
+.speed-btn:hover {
+  color: var(--text);
+}
+.speed-btn.active {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+.audio-download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  text-decoration: none;
+  font-weight: 600;
+}
+.audio-download-btn svg {
+  color: var(--accent);
+}
 #audio-card audio {
   width: 100%;
   border-radius: 12px;
@@ -1219,7 +1348,7 @@ a { color: var(--accent); }
 .kb-error-full { grid-column: 1 / -1; margin-top: 0; }
 .kb-hint { margin: 0 0 14px; font-size: 13px; color: var(--muted); }
 .kb-hint code {
-  font-family: Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: .92em;
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -1667,7 +1796,7 @@ a { color: var(--accent); }
 .service-cost-tag {
   font-size: 15px;
   font-weight: 700;
-  font-family: monospace;
+  font-family: var(--font-mono);
   color: var(--accent);
 }
 
