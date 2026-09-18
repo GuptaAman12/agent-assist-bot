@@ -50,7 +50,7 @@ def test_transcribe_success(client, monkeypatch):
         assert path  # temp file path is passed through
         return "I forgot my password"
 
-    monkeypatch.setattr("app.main.transcription_service.transcribe_file", fake_transcribe)
+    monkeypatch.setattr("app.services.transcription.transcribe_file", fake_transcribe)
     r = client.post("/transcribe/", files={"file": ("test.wav", b"RIFFfake", "audio/wav")})
     assert r.status_code == 200
     assert r.json() == {"transcript": "I forgot my password", "intent": "password_reset"}
@@ -60,7 +60,7 @@ def test_transcribe_upstream_error_maps_502(client, monkeypatch):
     def boom(path):
         raise TranscriptionError("AssemblyAI upload failed")
 
-    monkeypatch.setattr("app.main.transcription_service.transcribe_file", boom)
+    monkeypatch.setattr("app.services.transcription.transcribe_file", boom)
     r = client.post("/transcribe/", files={"file": ("test.wav", b"RIFFfake", "audio/wav")})
     assert r.status_code == 502
     assert "upload failed" in r.json()["detail"]
@@ -70,7 +70,7 @@ def test_transcribe_timeout_maps_504(client, monkeypatch):
     def boom(path):
         raise TranscriptionTimeout("timed out")
 
-    monkeypatch.setattr("app.main.transcription_service.transcribe_file", boom)
+    monkeypatch.setattr("app.services.transcription.transcribe_file", boom)
     r = client.post("/transcribe/", files={"file": ("test.wav", b"RIFFfake", "audio/wav")})
     assert r.status_code == 504
 
@@ -103,13 +103,13 @@ def test_transcribe_accepts_known_audio_type(client, monkeypatch):
     def fake_transcribe(path):
         return "some text"
 
-    monkeypatch.setattr("app.main.transcription_service.transcribe_file", fake_transcribe)
+    monkeypatch.setattr("app.services.transcription.transcribe_file", fake_transcribe)
     r = client.post("/transcribe/", files={"file": ("call.mp3", b"fake", "audio/mpeg")})
     assert r.status_code == 200
 
 
 def test_assist_match_shape(client, monkeypatch):
-    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
+    monkeypatch.setattr("app.services.llm.generate_response", lambda s, q, history=None: "answer")
     r = client.post("/assist/", json={"transcript": "how do i reset", "intent": "unknown"})
     assert r.status_code == 200
     body = r.json()
@@ -131,7 +131,7 @@ def test_assist_no_match(client, monkeypatch):
         called["llm"] = True
         return "should not be called"
 
-    monkeypatch.setattr("app.main.llm_service.generate_response", fake_generate)
+    monkeypatch.setattr("app.services.llm.generate_response", fake_generate)
     r = client.post("/assist/", json={"transcript": "gibberish", "intent": "unknown"})
     assert r.status_code == 200
     body = r.json()
@@ -145,8 +145,8 @@ def test_assist_no_match(client, monkeypatch):
 
 
 def test_assist_takeover_generates_audio(client, monkeypatch):
-    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
-    monkeypatch.setattr("app.main.synthesize", lambda t: ("out.wav", "groq-orpheus"))
+    monkeypatch.setattr("app.services.llm.generate_response", lambda s, q, history=None: "answer")
+    monkeypatch.setattr("app.services.tts.synthesize", lambda t: ("out.wav", "groq-orpheus"))
     r = client.post("/assist/", json={"transcript": "reset my password", "intent": "password_reset"})
     assert r.status_code == 200
     body = r.json()
@@ -156,8 +156,8 @@ def test_assist_takeover_generates_audio(client, monkeypatch):
 
 
 def test_assist_non_takeover_no_audio(client, monkeypatch):
-    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
-    monkeypatch.setattr("app.main.synthesize", lambda t: ("out.wav", "groq-orpheus"))
+    monkeypatch.setattr("app.services.llm.generate_response", lambda s, q, history=None: "answer")
+    monkeypatch.setattr("app.services.tts.synthesize", lambda t: ("out.wav", "groq-orpheus"))
     r = client.post("/assist/", json={"transcript": "refund please", "intent": "refund_request"})
     assert r.json()["ai_takeover"] is False
     assert r.json()["audio_url"] is None
@@ -165,8 +165,8 @@ def test_assist_non_takeover_no_audio(client, monkeypatch):
 
 def test_assist_mixed_issue_takes_over(client, monkeypatch):
     # Two issues, both automatable -> AI voice takeover should happen.
-    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
-    monkeypatch.setattr("app.main.synthesize", lambda t: ("out.wav", "groq-orpheus"))
+    monkeypatch.setattr("app.services.llm.generate_response", lambda s, q, history=None: "answer")
+    monkeypatch.setattr("app.services.tts.synthesize", lambda t: ("out.wav", "groq-orpheus"))
     r = client.post(
         "/assist/",
         json={
@@ -186,7 +186,7 @@ def test_assist_llm_error_maps_502(client, monkeypatch):
     def boom(s, q, history=None):
         raise LLMError("groq down")
 
-    monkeypatch.setattr("app.main.llm_service.generate_response", boom)
+    monkeypatch.setattr("app.services.llm.generate_response", boom)
     r = client.post("/assist/", json={"transcript": "hi", "intent": "unknown"})
     assert r.status_code == 502
 
@@ -198,7 +198,7 @@ def test_assist_forwards_history_to_llm(client, monkeypatch):
         captured["history"] = history
         return "answer"
 
-    monkeypatch.setattr("app.main.llm_service.generate_response", fake_generate)
+    monkeypatch.setattr("app.services.llm.generate_response", fake_generate)
     r = client.post(
         "/assist/",
         json={
@@ -227,7 +227,7 @@ def test_assist_no_match_with_history_answers_from_conversation(client, monkeypa
         captured["history"] = history
         return "answer"
 
-    monkeypatch.setattr("app.main.llm_service.generate_response", fake_generate)
+    monkeypatch.setattr("app.services.llm.generate_response", fake_generate)
     r = client.post(
         "/assist/",
         json={
@@ -256,7 +256,7 @@ def test_assist_no_match_uses_recent_history_turns(client, monkeypatch):
         captured["context"] = s
         return "answer"
 
-    monkeypatch.setattr("app.main.llm_service.generate_response", fake_generate)
+    monkeypatch.setattr("app.services.llm.generate_response", fake_generate)
     history = [{"transcript": f"q{i}", "response": f"r{i}"} for i in range(10)]
     r = client.post("/assist/", json={"transcript": "follow-up?", "intent": "unknown", "history": history})
     assert r.status_code == 200
@@ -266,12 +266,12 @@ def test_assist_no_match_uses_recent_history_turns(client, monkeypatch):
 
 
 def test_assist_tts_failure_returns_text_only(client, monkeypatch):
-    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
+    monkeypatch.setattr("app.services.llm.generate_response", lambda s, q, history=None: "answer")
 
     def boom(t):
         raise RuntimeError("tts down")
 
-    monkeypatch.setattr("app.main.synthesize", boom)
+    monkeypatch.setattr("app.services.tts.synthesize", boom)
     r = client.post("/assist/", json={"transcript": "reset my password", "intent": "password_reset"})
     assert r.status_code == 200
     body = r.json()
@@ -399,7 +399,7 @@ def test_kb_login_sets_cookie_and_serves_page(client, monkeypatch):
 
 def test_kb_session_invalidated_on_restart(client, monkeypatch):
     monkeypatch.setattr("app.config.ADMIN_TOKEN", "s3cret")
-    from app.main import ADMIN_SESSIONS
+    from app.dependencies import ADMIN_SESSIONS
 
     client.post("/kb-admin/login", data={"token": "s3cret"})
     assert client.get("/kb").status_code == 200
@@ -414,7 +414,7 @@ def test_kb_session_invalidated_on_restart(client, monkeypatch):
 
 def test_kb_logout_revokes_session(client, monkeypatch):
     monkeypatch.setattr("app.config.ADMIN_TOKEN", "s3cret")
-    from app.main import ADMIN_SESSIONS
+    from app.dependencies import ADMIN_SESSIONS
 
     client.post("/kb-admin/login", data={"token": "s3cret"})
     assert client.get("/kb").status_code == 200
@@ -431,14 +431,14 @@ def test_kb_page_open_when_no_admin_token(client):
 
 
 def test_assist_speak_to_agent_opens_handoff(client, monkeypatch):
-    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
+    monkeypatch.setattr("app.services.llm.generate_response", lambda s, q, history=None: "answer")
     captured = {}
 
     def fake_create(**kwargs):
         captured.update(kwargs)
         return "ticket123"
 
-    monkeypatch.setattr("app.main.handoff_service.create_ticket", fake_create)
+    monkeypatch.setattr("app.services.handoff.create_ticket", fake_create)
     r = client.post(
         "/assist/",
         json={"transcript": "I want to talk to a real person about my refund.", "intent": "speak_to_agent"},
@@ -456,7 +456,7 @@ def test_assist_no_match_opens_handoff(client, monkeypatch):
         captured.update(kwargs)
         return "ticket123"
 
-    monkeypatch.setattr("app.main.handoff_service.create_ticket", fake_create)
+    monkeypatch.setattr("app.services.handoff.create_ticket", fake_create)
     r = client.post(
         "/assist/",
         json={"transcript": "quantum pineapple submarine", "intent": "unknown"},
@@ -467,14 +467,14 @@ def test_assist_no_match_opens_handoff(client, monkeypatch):
 
 
 def test_assist_normal_no_handoff(client, monkeypatch):
-    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
+    monkeypatch.setattr("app.services.llm.generate_response", lambda s, q, history=None: "answer")
     called = {"create": False}
 
     def fake_create(**kwargs):
         called["create"] = True
         return "t"
 
-    monkeypatch.setattr("app.main.handoff_service.create_ticket", fake_create)
+    monkeypatch.setattr("app.services.handoff.create_ticket", fake_create)
     r = client.post(
         "/assist/",
         json={"transcript": "reset my password", "intent": "password_reset"},
@@ -532,14 +532,14 @@ def test_kb_soft_delete_and_restore(client):
 def test_rate_limit_transcribe(client, monkeypatch):
     monkeypatch.setattr("app.config.RATE_LIMIT_MAX_TRANSCRIBE", 2)
     monkeypatch.setattr("app.config.RATE_LIMIT_WINDOW_SEC", 60)
-    from app.main import _clear_rate_limit_state
+    from app.dependencies import _clear_rate_limit_state
 
     _clear_rate_limit_state()
 
     def fake_transcribe(path):
         return "hello"
 
-    monkeypatch.setattr("app.main.transcription_service.transcribe_file", fake_transcribe)
+    monkeypatch.setattr("app.services.transcription.transcribe_file", fake_transcribe)
     # First 2 should pass
     for _ in range(2):
         r = client.post("/transcribe/", files={"file": ("test.wav", b"RIFFfake", "audio/wav")})
@@ -552,8 +552,8 @@ def test_rate_limit_transcribe(client, monkeypatch):
 
 def test_rate_limit_assist(client, monkeypatch):
     monkeypatch.setattr("app.config.RATE_LIMIT_MAX_REQUESTS", 2)
-    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
-    from app.main import _clear_rate_limit_state
+    monkeypatch.setattr("app.services.llm.generate_response", lambda s, q, history=None: "answer")
+    from app.dependencies import _clear_rate_limit_state
 
     _clear_rate_limit_state()
     for _ in range(2):
@@ -575,7 +575,7 @@ def test_transcribe_requires_auth_when_admin_token_set(client, monkeypatch):
     )
     # Will go through to transcribe (mock to avoid real AssemblyAI)
     # Mock transcribe to avoid failure after auth
-    monkeypatch.setattr("app.main.transcription_service.transcribe_file", lambda p: "hello")
+    monkeypatch.setattr("app.services.transcription.transcribe_file", lambda p: "hello")
     r = client.post(
         "/transcribe/",
         files={"file": ("test.wav", b"xx", "audio/wav")},
@@ -651,7 +651,7 @@ def test_kb_unmatched_empty_when_no_logs(client):
 
 def test_kb_unmatched_returns_aggregated_and_in_kb_flag(client, tmp_path, monkeypatch):
     client.app.state.knowledge_base.matches_result = []
-    monkeypatch.setattr("app.main.handoff_service.create_ticket", lambda **k: "t99")
+    monkeypatch.setattr("app.services.handoff.create_ticket", lambda **k: "t99")
 
     # Ask an unmatched question twice
     client.post("/assist/", json={"transcript": "How do I update card?", "intent": "unknown"})
@@ -808,8 +808,8 @@ def test_assist_with_custom_voice(client, monkeypatch):
         captured["voice"] = voice
         return ("out.wav", "groq-orpheus")
 
-    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
-    monkeypatch.setattr("app.main.synthesize", fake_synth)
+    monkeypatch.setattr("app.services.llm.generate_response", lambda s, q, history=None: "answer")
+    monkeypatch.setattr("app.services.tts.synthesize", fake_synth)
     r = client.post(
         "/assist/",
         json={"transcript": "reset my password", "intent": "password_reset", "voice": "diana"},

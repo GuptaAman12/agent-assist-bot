@@ -140,7 +140,8 @@ def fake_kb_factory():
 @pytest.fixture
 def client(monkeypatch, tmp_path):
     from app import config as app_config
-    from app.main import _clear_rate_limit_state, app
+    from app.main import app
+    from app.dependencies import _clear_rate_limit_state
 
     from fastapi.testclient import TestClient
 

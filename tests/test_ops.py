@@ -16,8 +16,8 @@ def _make_audio(path, age_sec=0):
 def test_rate_limit_sets_retry_after(client, monkeypatch):
     monkeypatch.setattr("app.config.RATE_LIMIT_MAX_REQUESTS", 2)
     monkeypatch.setattr("app.config.RATE_LIMIT_WINDOW_SEC", 60)
-    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
-    from app.main import _clear_rate_limit_state
+    monkeypatch.setattr("app.services.llm.generate_response", lambda s, q, history=None: "answer")
+    from app.dependencies import _clear_rate_limit_state
 
     _clear_rate_limit_state()
     for _ in range(2):
@@ -32,8 +32,8 @@ def test_rate_limit_sets_retry_after(client, monkeypatch):
 def test_rate_limit_xff_isolated_when_trusted(client, monkeypatch):
     monkeypatch.setattr("app.config.TRUST_PROXY_HEADERS", True)
     monkeypatch.setattr("app.config.RATE_LIMIT_MAX_REQUESTS", 1)
-    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
-    from app.main import _clear_rate_limit_state
+    monkeypatch.setattr("app.services.llm.generate_response", lambda s, q, history=None: "answer")
+    from app.dependencies import _clear_rate_limit_state
 
     _clear_rate_limit_state()
     body = {"transcript": "hi", "intent": "unknown"}
@@ -49,8 +49,8 @@ def test_rate_limit_xff_isolated_when_trusted(client, monkeypatch):
 def test_rate_limit_xff_ignored_when_untrusted(client, monkeypatch):
     monkeypatch.setattr("app.config.TRUST_PROXY_HEADERS", False)
     monkeypatch.setattr("app.config.RATE_LIMIT_MAX_REQUESTS", 1)
-    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
-    from app.main import _clear_rate_limit_state
+    monkeypatch.setattr("app.services.llm.generate_response", lambda s, q, history=None: "answer")
+    from app.dependencies import _clear_rate_limit_state
 
     _clear_rate_limit_state()
     body = {"transcript": "hi", "intent": "unknown"}

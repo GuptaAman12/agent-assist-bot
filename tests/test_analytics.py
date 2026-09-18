@@ -18,7 +18,7 @@ def _analytics_lines(tmp_path):
 
 def test_no_match_logs_query_and_counts(client, tmp_path, monkeypatch):
     client.app.state.knowledge_base.matches_result = []
-    monkeypatch.setattr("app.main.handoff_service.create_ticket", lambda **k: "t9")
+    monkeypatch.setattr("app.services.handoff.create_ticket", lambda **k: "t9")
     r = client.post("/assist/", json={"transcript": "quantum pineapple submarine", "intent": "unknown"})
     assert r.status_code == 200
 
@@ -39,7 +39,7 @@ def test_no_match_logs_query_and_counts(client, tmp_path, monkeypatch):
 
 def test_no_match_with_history_flagged(client, tmp_path, monkeypatch):
     client.app.state.knowledge_base.matches_result = []
-    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
+    monkeypatch.setattr("app.services.llm.generate_response", lambda s, q, history=None: "answer")
     r = client.post(
         "/assist/",
         json={
@@ -61,7 +61,7 @@ def test_no_match_with_history_flagged(client, tmp_path, monkeypatch):
 
 def test_transcript_truncated(client, tmp_path, monkeypatch):
     client.app.state.knowledge_base.matches_result = []
-    monkeypatch.setattr("app.main.handoff_service.create_ticket", lambda **k: None)  # delivery failed
+    monkeypatch.setattr("app.services.handoff.create_ticket", lambda **k: None)  # delivery failed
     long_text = "word " * 500
     r = client.post("/assist/", json={"transcript": long_text, "intent": "unknown"})
     assert r.status_code == 200
@@ -73,8 +73,8 @@ def test_transcript_truncated(client, tmp_path, monkeypatch):
 
 
 def test_assist_markers_and_counters(client, tmp_path, monkeypatch):
-    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
-    monkeypatch.setattr("app.main.synthesize", lambda t: ("out.wav", "groq-orpheus"))
+    monkeypatch.setattr("app.services.llm.generate_response", lambda s, q, history=None: "answer")
+    monkeypatch.setattr("app.services.tts.synthesize", lambda t: ("out.wav", "groq-orpheus"))
     # password_reset -> takeover (tts groq), no handoff
     r = client.post("/assist/", json={"transcript": "reset my password", "intent": "password_reset"})
     assert r.status_code == 200
@@ -98,8 +98,8 @@ def test_assist_markers_and_counters(client, tmp_path, monkeypatch):
 
 
 def test_speak_to_agent_handoff_counted(client, tmp_path, monkeypatch):
-    monkeypatch.setattr("app.main.llm_service.generate_response", lambda s, q, history=None: "answer")
-    monkeypatch.setattr("app.main.handoff_service.create_ticket", lambda **k: "t1")
+    monkeypatch.setattr("app.services.llm.generate_response", lambda s, q, history=None: "answer")
+    monkeypatch.setattr("app.services.handoff.create_ticket", lambda **k: "t1")
     r = client.post(
         "/assist/",
         json={"transcript": "I want to talk to a real person about my refund.", "intent": "speak_to_agent"},
@@ -114,7 +114,7 @@ def test_speak_to_agent_handoff_counted(client, tmp_path, monkeypatch):
 
 
 def test_transcribe_counted(client, tmp_path, monkeypatch):
-    monkeypatch.setattr("app.main.transcription_service.transcribe_file", lambda p: "hello")
+    monkeypatch.setattr("app.services.transcription.transcribe_file", lambda p: "hello")
     r = client.post("/transcribe/", files={"file": ("test.wav", b"RIFFfake", "audio/wav")})
     assert r.status_code == 200
     lines = _analytics_lines(tmp_path)
