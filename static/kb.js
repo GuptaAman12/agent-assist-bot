@@ -645,3 +645,47 @@ loadStats();
 loadUnmatched();
 loadQueue();
 checkHealth();
+/* Test KB Logic */
+let kbTestTimeout = null;
+const testInput = document.getElementById('kb-test-input');
+const testResults = document.getElementById('kb-test-results');
+
+if (testInput && testResults) {
+  testInput.addEventListener('input', () => {
+    clearTimeout(kbTestTimeout);
+    const q = testInput.value.trim();
+    if (!q) {
+      testResults.hidden = true;
+      testResults.innerHTML = '';
+      return;
+    }
+    kbTestTimeout = setTimeout(async () => {
+      try {
+        const res = await fetch(`/kb/search?q=${encodeURIComponent(q)}`, { headers: getAuthHeaders() });
+        if (!res.ok) throw new Error('Search failed');
+        const data = await res.json();
+        testResults.innerHTML = '';
+        if (!data.matches || data.matches.length === 0) {
+          testResults.innerHTML = '<li style="padding:12px;color:var(--muted);text-align:center;">No matches found</li>';
+        } else {
+          data.matches.forEach(m => {
+            const li = document.createElement('li');
+            li.style.padding = '8px 12px';
+            li.style.fontSize = '13px';
+            li.style.borderBottom = '1px solid var(--border)';
+            const scoreClass = m.score >= 0.45 ? 'status-ok' : 'status-down';
+            li.innerHTML = `<div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+              <strong>Match Score</strong>
+              <span class="status-pill ${scoreClass}">${(m.score * 100).toFixed(1)}%</span>
+            </div>
+            <div style="color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${m.text.replace(/"/g, '&quot;')}">${m.text}</div>`;
+            testResults.appendChild(li);
+          });
+        }
+        testResults.hidden = false;
+      } catch (err) {
+        console.error(err);
+      }
+    }, 300);
+  });
+}

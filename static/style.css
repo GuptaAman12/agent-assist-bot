@@ -2083,3 +2083,54 @@ body,
 .recording-bar {
   transition-duration: .2s;
 }
+
+
+/* Feedback UI */
+.feedback-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.feedback-prompt {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+  margin-right: 4px;
+}
+.feedback-btn {
+  color: var(--muted);
+  transition: color .2s, transform .2s;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.feedback-btn:hover {
+  color: var(--accent);
+  transform: scale(1.1);
+  border-color: var(--accent);
+}
+.feedback-btn.active {
+  color: var(--bg);
+  background: var(--text);
+  border-color: var(--text);
+}
+.feedback-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+.feedback-thanks {
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 600;
+  margin-left: 8px;
+  animation: card-enter .3s ease-out;
+}

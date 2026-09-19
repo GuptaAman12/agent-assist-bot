@@ -9,3 +9,9 @@ class AssistRequest(BaseModel):
 class KBEntryRequest(BaseModel):
     question: str = ""
     response: str
+
+class FeedbackRequest(BaseModel):
+    transcript: str
+    positive: bool
+    assist_request_id: str | None = None
+

@@ -24,6 +24,20 @@ def kb_list(
         entries = entries[offset : offset + limit]
     return {"count": total, "entries": entries, "limit": limit, "offset": offset}
 
+@router.get("/kb/search", dependencies=[Depends(require_admin)])
+def kb_search(request: Request, q: str = Query(..., min_length=1)):
+    kb: KnowledgeBase = request.app.state.knowledge_base
+    # Get matches regardless of threshold by calling the model directly if needed,
+    # but `best_matches` actually applies the threshold. Wait, `best_matches` filters out below threshold.
+    # Let's write a small method or just call `best_matches` which returns matches above threshold.
+    # Better yet, if we want to show all scores (even below threshold), we need to access `kb._encode_and_score`.
+    # Let's just use `kb.best_matches(q, k=5)` for now; if it's below threshold, maybe it's not returned.
+    # Wait! In `rag.py`, `best_matches` filters by `config.KB_MIN_SIMILARITY`.
+    # Let's pass a bypass param or just return what it matches.
+    matches = kb.best_matches(q, k=5, bypass_threshold=True)
+    return {"matches": [{"text": text, "score": score} for text, score in matches]}
+
+
 
 @router.post("/kb", dependencies=[Depends(require_admin)])
 def kb_add(entry: KBEntryRequest, request: Request):

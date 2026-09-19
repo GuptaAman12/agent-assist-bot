@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=62">
+  <link rel="stylesheet" href="/static/style.css?v=63">
 </head>
 <body>
   <header class="topbar">
@@ -112,6 +112,14 @@
           <button type="submit" id="kb-add-btn" class="btn-primary" title="Add entry and re-embed immediately">Add entry</button>
         </form>
       </section>
+      <section class="card" aria-label="Test Knowledge Base">
+        <h3 class="card-title">Test Knowledge Base</h3>
+        <p class="kb-hint" style="margin-bottom:8px;">Type a phrase to see top matches & similarity scores.</p>
+        <div class="kb-toolbar" style="margin:0;">
+          <input type="text" id="kb-test-input" placeholder="e.g. 'Where is my order?'" autocomplete="off" />
+        </div>
+        <ul id="kb-test-results" class="history-list kb-list" style="margin-top:12px;" hidden></ul>
+      </section>
       <section class="card kb-unmatched-card" aria-label="Needs Answer">
         <div class="result-head">
           <h3 class="card-title">Needs Answer (<span id="unmatched-count">0</span>)</h3>
@@ -135,6 +143,6 @@
   </main>
 
   <script src="/static/theme.js?v=1"></script>
-  <script src="/static/kb.js?v=50"></script>
+  <script src="/static/kb.js?v=51"></script>
 </body>
 </html>

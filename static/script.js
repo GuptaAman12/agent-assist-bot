@@ -272,6 +272,16 @@ function showResult(item) {
   els.timestamp.textContent = new Date(item.at).toLocaleString();
   els.response.innerHTML = item.responseHtml;
 
+  const feedbackRow = document.getElementById('feedback-row');
+  if (feedbackRow) {
+    feedbackRow.hidden = false;
+    document.getElementById('feedback-up').classList.remove('active');
+    document.getElementById('feedback-down').classList.remove('active');
+    document.getElementById('feedback-up').disabled = false;
+    document.getElementById('feedback-down').disabled = false;
+    document.getElementById('feedback-thanks').hidden = true;
+  }
+
   if (item.sources && item.sources.length) {
     els.sourceCard.hidden = false;
     els.sourcesList.innerHTML = '';
@@ -349,7 +359,33 @@ els.copyBtn.addEventListener('click', async () => {
   } catch {
     els.copyBtn.textContent = 'Copy failed';
   }
-  setTimeout(() => { els.copyBtn.textContent = 'Copy'; }, 1500);
+  setTimeout(() => els.copyBtn.textContent = 'Copy', 2000);
+});
+
+['up', 'down'].forEach(type => {
+  const btn = document.getElementById(`feedback-${type}`);
+  if (btn) {
+    btn.addEventListener('click', async () => {
+      if (!current) return;
+      document.getElementById('feedback-up').disabled = true;
+      document.getElementById('feedback-down').disabled = true;
+      btn.classList.add('active');
+      document.getElementById('feedback-thanks').hidden = false;
+      
+      try {
+        await fetch('/analytics/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            transcript: current.transcript,
+            positive: type === 'up'
+          })
+        });
+      } catch (e) {
+        console.error('Failed to submit feedback', e);
+      }
+    });
+  }
 });
 
 function renderHistory() {

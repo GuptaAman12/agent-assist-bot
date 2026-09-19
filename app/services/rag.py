@@ -244,7 +244,7 @@ class KnowledgeBase:
         e = self._entries[idx]
         return {"id": e["id"], "question": e.get("question", ""), "response": e["response"]}
 
-    def best_matches(self, query: str, k: int = 3) -> list[tuple[str, float]]:
+    def best_matches(self, query: str, k: int = 3, bypass_threshold: bool = False) -> list[tuple[str, float]]:
         self.reload_if_changed()
         with self._lock:
             active = [e for e in self._entries if not e.get("deleted_at")]
@@ -258,7 +258,7 @@ class KnowledgeBase:
             matches = []
             for idx in order:
                 score = float(scores[idx].item())
-                if score < config.KB_MIN_SIMILARITY:
+                if score < config.KB_MIN_SIMILARITY and not bypass_threshold:
                     break
                 matches.append((active[idx]["response"], round(score, 4)))
                 if len(matches) >= k:

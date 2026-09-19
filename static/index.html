@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=62">
+  <link rel="stylesheet" href="/static/style.css?v=64">
 </head>
 <body>
   <header class="topbar">
@@ -154,6 +154,16 @@
             <button type="button" id="copy-btn" class="btn-ghost btn-small" title="Copy the AI response text to clipboard">Copy</button>
           </div>
           <div id="response" class="response-prose"></div>
+          <div class="feedback-row" id="feedback-row" hidden>
+            <span class="feedback-prompt">Was this helpful?</span>
+            <button type="button" class="icon-btn feedback-btn" id="feedback-up" title="Helpful" aria-label="Thumbs up">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>
+            </button>
+            <button type="button" class="icon-btn feedback-btn" id="feedback-down" title="Not helpful" aria-label="Thumbs down">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"></path></svg>
+            </button>
+            <span id="feedback-thanks" class="feedback-thanks" hidden>Thanks for the feedback!</span>
+          </div>
         </div>
 
         <div class="card result-card" id="source-card" hidden>
@@ -186,6 +196,6 @@
 
   <script src="/static/vendor/lame.all.js?v=1"></script>
   <script src="/static/theme.js?v=1"></script>
-  <script src="/static/script.js?v=51"></script>
+  <script src="/static/script.js?v=52"></script>
 </body>
 </html>

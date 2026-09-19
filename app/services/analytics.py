@@ -79,6 +79,19 @@ def log_no_match(transcript: str, intents: list, from_history: bool = False,
     )
 
 
+def log_feedback(transcript: str, positive: bool, assist_request_id: str | None = None) -> None:
+    if positive:
+        record("feedback:positive")
+    else:
+        record("feedback:negative")
+    log_event(
+        "feedback",
+        positive=positive,
+        transcript=(transcript or "")[:MAX_TRANSCRIPT_CHARS],
+        assist_request_id=assist_request_id,
+    )
+
+
 def get_unmatched_queries(limit: int = 50) -> list[dict]:
     """Read and aggregate unmatched queries from the analytics log for KB curation.
     Returns entries sorted by frequency descending, then recency descending."""
