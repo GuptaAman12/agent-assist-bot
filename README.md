@@ -1,232 +1,485 @@
-# 🧠 Agent Assist & Resolution Bot
+# Agent Assist & Resolution Bot
 
-A real-time customer support system that transcribes live audio, detects user intent, retrieves answers from a knowledge base (RAG), and for predefined issues, lets an AI voice agent take over and speak the resolution.
+An intelligent, real-time customer support platform that transcribes live audio, classifies caller intent, retrieves context-aware answers from a semantic knowledge base (RAG), and autonomously resolves routine issues through a neural voice agent — escalating complex cases to human operators with full handoff context.
+
+[![CI](https://github.com/GuptaAman12/agent-assist-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/GuptaAman12/agent-assist-bot/actions/workflows/ci.yml)
+![Python 3.10](https://img.shields.io/badge/python-3.10-blue)
+![FastAPI](https://img.shields.io/badge/framework-FastAPI-009688)
+![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
-## 🧩 Features
+## Table of Contents
 
-- 🔊 Upload audio files (or drag & drop) → instant transcript via AssemblyAI.
-- 🎙️ **Record live from the microphone** right in the dashboard (MediaRecorder) - the recording is re-encoded to MP3 in the browser and becomes the upload.
-- 🎯 Intent detection from the transcript (password reset, refunds, order tracking…).
-- 🧠 Context-aware RAG using `sentence-transformers` - knowledge-base entries are embedded as question + response at startup and incrementally re-embedded when entries change.
-- 🎚️ **Retrieval confidence threshold** - queries that don't match the knowledge base (cosine similarity below `KB_MIN_SIMILARITY`) get an honest "I'm not sure" instead of a confidently wrong answer, and skip the LLM call entirely.
-- 🧩 **Multi-topic retrieval** - mixed recordings pull the top matching KB entries (`sources` array) so every issue in a single call is answered from the knowledge base, not invented.
-- 📝 **Hot-reloadable knowledge base** - add, edit, and remove entries from a dedicated manager page, or edit `knowledge_base.json` directly; changes apply without restarting (invalid edits keep serving the last good state).
-- 💬 Answer generation using **Groq** (`openai/gpt-oss-20b` by default).
-- 💭 **Multi-turn memory** - the dashboard sends the recent conversation with each request, so follow-ups like "what about my order from earlier?" are answered from context, not as isolated one-shot Q&A.
-- 🎫 **Human handoff** - when a caller asks to speak to an agent, or the bot can't match the knowledge base, a support ticket is created (webhook with retry, else email, else disk queue), so the handoff actually happens instead of just being promised. The dashboard shows a "ticket opened" banner with the ticket ID.
-- 🤖 AI takeover: automatable intents are answered aloud by a realistic neural voice (**Groq Orpheus**), with automatic gTTS fallback. If a recording mentions **any** automatable intent, the bot takes over and speaks.
-- 🔒 **Rate limiting + auth** on `/transcribe/` and `/assist/` (when `ADMIN_TOKEN` is set) so the credit-burning endpoints can't be abused anonymously. Over-limit responses carry a `Retry-After` header; set `TRUST_PROXY_HEADERS=true` only behind a trusted reverse proxy so limits key off `X-Forwarded-For`.
-- 🧹 **TTS audio pruning** - generated voice files in `static/audio/` are evicted past `AUDIO_TTL_SEC` / `AUDIO_MAX_FILES` (checked at startup and after each synthesis), so the disk can't fill up unattended.
-- 🖥️ **Modern dashboard with dual view modes**:
-  - **Cards View**: Inspector cards with transcript, confidence, sources, audio player, and feedback.
-  - **Chat Stream View**: Live continuous dialogue timeline where customer utterances and AI voice answers flow naturally with timestamps and sentiment tags.
-- 🌊 **Active Voice Waveform Visualizer** - Real-time frequency waveform animation on canvas while the AI assistant speaks.
-- ✍️ **Human-in-the-loop "Draft & Edit" Mode** - Agents can tweak the AI draft directly in-place with revision indicators before copying or resolving.
-- 🎯 **Sentiment & Frustration Meter** - Automatic customer emotion detection (Satisfied 🟢, Neutral ⚪, Frustrated 🟠, Urgent/Escalated 🔴) displayed on caller transcripts.
-- 🔊 **Global Autoplay & Audio Mute** - Granular audio controls persisted across sessions in `localStorage`.
-- 👍 **User Feedback Loop** - Instant helpful/unhelpful rating on responses logged to `analytics.log.jsonl`.
-- 📁 **One-Click Call Log Export** - Export complete dialog sessions as clean Markdown reports.
-- 📚 Knowledge base manager at `/static/kb.html`: global search, **live similarity test sandbox** (`GET /kb/search`), usage analytics summary, unmatched queries curation feed with 1-click 'Add to KB', inline editing, soft-delete with undo, paginated list (`?limit&offset`), import/export (bulk JSON), reload from disk, live system status indicator.
-- 📝 **Audit log** (`knowledge_base.log.jsonl`): every admin KB write is appended with timestamp, request ID, and admin identity - never blocks the request.
-- 📊 **Usage analytics & cost dashboard** (`analytics.log.jsonl` + `/static/analytics.html` + `GET /analytics/summary`): tracks LLM prompt/completion token usage, voice synthesis character volume, audio transcription duration, RAG match rates, and real-time infrastructure cost estimations across all services with a dedicated analytics dashboard.
+- [Overview](#overview)
+- [Key Features](#key-features)
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Getting Started](#getting-started)
+- [Docker Deployment](#docker-deployment)
+- [Configuration Reference](#configuration-reference)
+- [API Reference](#api-reference)
+- [Knowledge Base Management](#knowledge-base-management)
+- [Logging & Observability](#logging--observability)
+- [Testing](#testing)
+- [Project Structure](#project-structure)
+- [Contributing](#contributing)
 
-## 🛠️ Tech Stack
+---
 
-| Feature                | Stack / API                                        |
-|------------------------|----------------------------------------------------|
-| Transcription          | [AssemblyAI](https://www.assemblyai.com)           |
-| Embedding & RAG        | Sentence Transformers (`all-MiniLM-L6-v2`)         |
-| LLM for Response       | [Groq API](https://groq.com/) - GPT-OSS 20B        |
-| Voice Generation       | [Groq Orpheus](https://console.groq.com/docs/text-to-speech) (`gTTS` fallback) |
-| Mic recording encode   | [lamejs](https://github.com/zhuker/lamejs) (in-browser MP3) |
-| Backend Framework      | FastAPI                                            |
-| Frontend               | HTML + CSS + JS                                    |
+## Overview
 
-> **AssemblyAI format note:** this account reliably transcodes **MP3**; it currently rejects raw WebM/Opus and PCM WAV recordings (`application/octet-stream` transcoding error). All `audio_sample/*.wav` files are actually MP3s (works for that reason), and live mic recordings are re-encoded to MP3 in the browser before upload.
+Agent Assist & Resolution Bot bridges the gap between fully automated voice bots and traditional ticket-based support. When a customer calls in or uploads a recording:
 
-## 📦 Installation
+1. **Transcription** — Audio is transcribed in real time via AssemblyAI.
+2. **Intent Classification** — Regex-based classifiers detect what the caller needs (password reset, refund, order tracking, etc.).
+3. **Semantic Retrieval (RAG)** — The transcript is matched against a vector-embedded knowledge base using cosine similarity. Only results above a confidence threshold are used — the system never fabricates answers.
+4. **LLM Response Generation** — Matched context is sent to a Groq-hosted LLM for natural, conversational response synthesis.
+5. **AI Voice Takeover** — For automatable intents, a neural voice (Groq Orpheus) speaks the resolution directly to the caller.
+6. **Human Handoff** — When the bot can't help or the caller asks for a person, a support ticket is created and dispatched via webhook, email, or disk queue.
 
-1. **Clone this repo**
+The platform ships with three integrated web interfaces: an **agent dashboard** for live call handling, a **knowledge base manager** for content curation, and an **analytics dashboard** for usage and cost monitoring.
 
-   ```
-   git clone https://github.com/GuptaAman12/agent-assist-bot
-   cd agent-assist-bot
-   ```
+---
 
-2. **Install dependencies**
+## Key Features
 
-   ```
-   pip install -r requirements.txt
-   ```
+### Core Pipeline
 
-3. **Create a `.env` file** (copy the template):
+| Capability | Description |
+|---|---|
+| **Audio Transcription** | Upload files (drag & drop, 17 formats) or record live from the microphone — recordings are MP3-encoded in-browser via lamejs |
+| **Intent Detection** | Keyword-based classifier with left-boundary regex matching for natural language tolerance (handles plurals, verb forms) |
+| **Semantic RAG** | `sentence-transformers` (`all-MiniLM-L6-v2`) with question+response joint embeddings, incremental re-encoding on changes |
+| **Confidence Threshold** | Queries below `KB_MIN_SIMILARITY` (default 0.45) return an honest fallback instead of hallucinated answers |
+| **Multi-topic Retrieval** | Mixed recordings pull top-k matching KB entries — every issue in a single call gets addressed from the knowledge base |
+| **Multi-turn Memory** | The dashboard sends conversation history (up to 5 turns) so follow-up questions are answered from context |
+| **LLM Generation** | Groq API (`openai/gpt-oss-20b`) with mojibake repair and spoken-output constraints |
+| **Neural Voice Synthesis** | Groq Orpheus TTS with 6 voices, sentence-boundary chunking, WAV header normalization, and automatic gTTS fallback |
+| **Human Handoff** | Webhook (3x retry with backoff), SMTP email, or disk queue — the dashboard shows ticket ID banners |
 
-   ```
-   ASSEMBLYAI_API_KEY=your_assembly_ai_key
-   GROQ_API_KEY=your_groq_api_key
-   ```
+### Agent Dashboard
 
-   A template with all keys is committed as `.env.example` - copy it, then fill in real values:
+- **Dual View Modes** — Cards view (inspector cards with confidence, sources, audio) and Chat Stream view (conversational timeline with timestamps)
+- **Voice Waveform Visualizer** — Real-time frequency animation on canvas during AI voice playback
+- **Draft & Edit Mode** — Human-in-the-loop: agents can revise AI drafts in-place before sending
+- **Sentiment Detection** — Automatic emotion classification (Satisfied 🟢, Neutral ⚪, Frustrated 🟠, Urgent 🔴)
+- **Feedback Loop** — Thumbs up/down ratings logged to analytics for continuous improvement
+- **Session Export** — One-click Markdown export of complete call transcripts
+- **Autoplay & Mute** — Granular audio controls persisted in `localStorage`
 
-   ```
-   cp .env.example .env
-   ```
+### Knowledge Base Manager
 
-   Optional overrides (also listed in `.env.example`):
+- Full CRUD with inline editing, soft-delete with undo, and pagination
+- **Live Similarity Sandbox** — Test queries against the KB in real time (`GET /kb/search`)
+- **Unmatched Query Feed** — Surface below-threshold queries with one-click "Add to KB"
+- Bulk JSON import/export, manual reload from disk
+- Live system status indicator
 
-   ```
-   GROQ_MODEL=openai/gpt-oss-20b        # chat model
-   EMBEDDING_MODEL=all-MiniLM-L6-v2      # sentence-transformers model
-   KB_MIN_SIMILARITY=0.45                # below this, /assist/ answers "I'm not sure"
-   MAX_UPLOAD_BYTES=104857600            # max /transcribe/ upload size (100 MB)
-   ADMIN_TOKEN=change-me                 # if set, /kb/* and /transcribe/+/assist/ require auth
-   RATE_LIMIT_MAX_REQUESTS=20            # per-IP per minute for /assist/
-   RATE_LIMIT_MAX_TRANSCRIBE=10          # stricter for the costlier transcribe endpoint
-   TRUST_PROXY_HEADERS=false             # true only behind a trusted proxy (uses X-Forwarded-For for rate limits)
-   AUDIO_TTL_SEC=86400                   # prune TTS audio older than this (seconds)
-   AUDIO_MAX_FILES=100                   # keep at most this many TTS audio files
-   HANDOFF_WEBHOOK_URL=                  # POST ticket JSON when a human is needed
-   GROQ_TTS_MODEL=canopylabs/orpheus-v1-english
-   GROQ_TTS_VOICE=troy                   # autumn/diana/hannah/austin/daniel/troy
-   ```
+### Analytics & Observability
 
-   Handoff can go to an email instead of a webhook (`HANDOFF_EMAIL_TO` + `SMTP_*`); with neither set, tickets are still recorded in the structured logs.
+- **Cost Dashboard** — Real-time estimates across LLM tokens, transcription hours, and TTS character volume
+- **Audit Log** — Every admin KB write recorded with timestamp, request ID, and admin identity (`knowledge_base.log.jsonl`)
+- **Usage Counters** — Process-local metrics served via `GET /stats` and `GET /analytics/summary`
 
-4. **Run the server**
+### Security & Operations
 
-   ```
-   uvicorn main:app --reload
-   ```
+- **Admin Auth** — Token-based authentication via header or HttpOnly session cookie
+- **Rate Limiting** — Per-IP sliding window with `Retry-After` headers; proxy-aware via `X-Forwarded-For`
+- **Upload Guards** — Extension allowlist (415) and size cap (413) enforced before any API call
+- **TTS Pruning** — Automatic eviction of generated audio files by age and count
+- **Hot-Reload KB** — Edit `knowledge_base.json` directly; changes apply on the next query without restart
 
-5. Open 👉 http://127.0.0.1:8000/ (redirects to the UI) - knowledge base manager at http://127.0.0.1:8000/static/kb.html
+---
 
-The first startup downloads the `all-MiniLM-L6-v2` embedding model from HuggingFace, so it can take a while. Interactive API docs are at `/docs`.
-
-## 🧪 Tests
+## Architecture
 
 ```
-pip install -r requirements-dev.txt
-python -m pytest -q
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          Client (Browser)                               │
+│  ┌──────────────┐  ┌───────────────┐  ┌────────────────────────────┐   │
+│  │  Dashboard    │  │  KB Manager   │  │  Analytics Dashboard       │   │
+│  │  index.html   │  │  kb.html      │  │  analytics.html            │   │
+│  └──────┬───────┘  └──────┬────────┘  └───────────┬────────────────┘   │
+└─────────┼──────────────────┼──────────────────────┼────────────────────┘
+          │                  │                      │
+          ▼                  ▼                      ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        FastAPI Application                              │
+│                                                                         │
+│  Routes:  /transcribe/  /assist/  /kb/*  /handoff/*  /analytics/*      │
+│                                                                         │
+│  Middleware: request_context (X-Request-ID, access logs)                │
+│              guard_admin_pages (auth gate on KB/analytics)              │
+│                                                                         │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │                         Services Layer                           │   │
+│  │  ┌──────────────┐ ┌─────────┐ ┌─────────┐ ┌──────────────────┐ │   │
+│  │  │ Transcription │ │  Intent │ │   RAG   │ │       LLM        │ │   │
+│  │  │ (AssemblyAI)  │ │ Detect  │ │  (ST)   │ │   (Groq Chat)    │ │   │
+│  │  └──────────────┘ └─────────┘ └─────────┘ └──────────────────┘ │   │
+│  │  ┌──────────────┐ ┌──────────────┐ ┌────────────────────────┐  │   │
+│  │  │     TTS      │ │   Handoff    │ │      Analytics         │  │   │
+│  │  │(Orpheus/gTTS)│ │(Webhook/SMTP)│ │  (Counters + JSONL)    │  │   │
+│  │  └──────────────┘ └──────────────┘ └────────────────────────┘  │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  Data:  knowledge_base.json (RAG corpus, hot-reloadable)               │
+│         *.log.jsonl (audit, analytics, handoff queue)                   │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-156 tests cover intent detection (incl. word-boundary behavior), hybrid retrieval (BM25 + dense semantic search), KB hot-reload behavior (threshold, external edits, broken-file fail-open, ID stability, question+response re-embedding, admin auth), TTS stripping/normalization/fallback/pruning, AssemblyAI/Groq error paths, upload guards, handoff retry/queue, rate-limit `Retry-After` + proxy headers, analytics events/counters/`/stats`, audit log, import/export, and the full API surface - all external calls and the embedding model are mocked, so tests run offline and fast. CI runs them on every push (`.github/workflows/ci.yml`).
+---
 
-## 🐳 Docker
+## Tech Stack
 
-**Recommended (one command):**
+| Component | Technology |
+|---|---|
+| **Backend** | [FastAPI](https://fastapi.tiangolo.com/) (Python 3.10) |
+| **Transcription** | [AssemblyAI](https://www.assemblyai.com/) |
+| **Embeddings & RAG** | [Sentence Transformers](https://www.sbert.net/) (`all-MiniLM-L6-v2`) + PyTorch |
+| **LLM** | [Groq API](https://groq.com/) — `openai/gpt-oss-20b` |
+| **Voice Synthesis** | [Groq Orpheus](https://console.groq.com/docs/text-to-speech) (`canopylabs/orpheus-v1-english`) with [gTTS](https://gtts.readthedocs.io/) fallback |
+| **Audio Encoding** | [lamejs](https://github.com/zhuker/lamejs) (in-browser MP3 for mic recordings) |
+| **Frontend** | Vanilla HTML/CSS/JS — no build step required |
+| **CI/CD** | GitHub Actions (`.github/workflows/ci.yml`) |
+| **Containerization** | Docker + Docker Compose |
 
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.10+
+- [AssemblyAI API key](https://www.assemblyai.com/dashboard/signup)
+- [Groq API key](https://console.groq.com/keys)
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/GuptaAman12/agent-assist-bot.git
+cd agent-assist-bot
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Configure environment
+cp .env.example .env
+# Edit .env and add your API keys:
+#   ASSEMBLYAI_API_KEY=your_key_here
+#   GROQ_API_KEY=your_key_here
+
+# Start the server
+uvicorn main:app --reload
 ```
+
+Open **http://127.0.0.1:8000/** to access the dashboard. The first startup downloads the `all-MiniLM-L6-v2` embedding model from HuggingFace (~90 MB), which may take a moment.
+
+| Interface | URL |
+|---|---|
+| Agent Dashboard | http://127.0.0.1:8000/static/index.html |
+| Knowledge Base Manager | http://127.0.0.1:8000/static/kb.html |
+| Analytics Dashboard | http://127.0.0.1:8000/static/analytics.html |
+| Interactive API Docs | http://127.0.0.1:8000/docs |
+
+### Quick Test (No Microphone Required)
+
+```bash
+# Test the assist endpoint directly
+curl -X POST http://127.0.0.1:8000/assist/ \
+  -H "Content-Type: application/json" \
+  -d '{"transcript": "How do I reset my password?", "intent": "password_reset"}'
+
+# Test with a sample audio file
+curl -X POST http://127.0.0.1:8000/transcribe/ \
+  -F "file=@audio_sample/password_reset.wav"
+```
+
+Pre-recorded audio samples are included in `audio_sample/` for testing transcription and intent classification.
+
+---
+
+## Docker Deployment
+
+### Docker Compose (Recommended)
+
+```bash
 docker compose up -d --build
 ```
 
-Starts the full stack (ports, `.env` keys, model cache volume) from `docker-compose.yml` - then open http://localhost:8000/. In Docker Desktop you can start/stop the stack from the **Containers** tab without any commands.
+This starts the application on port 8000 with `.env` keys injected at runtime and a persistent volume for the HuggingFace model cache. Open **http://localhost:8000/**.
 
-**Manual alternative:**
+### Manual Docker Build
 
-```
+```bash
 docker build -t agent-assist-bot .
-docker run -p 8000:8000 --env-file .env agent-assist-bot
-```
-
-Keys are passed at runtime via `--env-file` - never baked into the image. First container start downloads the embedding model; compose mounts a cache volume automatically so it persists across restarts:
-
-```
 docker run -p 8000:8000 --env-file .env -v hf_cache:/app/.hf_cache agent-assist-bot
 ```
 
-## 📂 Architecture
+> **Security:** API keys are passed at runtime via `--env-file` and are never baked into the image. The container runs as a non-root `appuser` and includes a built-in healthcheck.
+
+---
+
+## Configuration Reference
+
+All configuration is managed through environment variables (set in `.env`). A complete template is provided in `.env.example`.
+
+### Required
+
+| Variable | Description |
+|---|---|
+| `ASSEMBLYAI_API_KEY` | AssemblyAI API key for audio transcription |
+| `GROQ_API_KEY` | Groq API key for LLM inference and TTS |
+
+### Optional
+
+| Variable | Default | Description |
+|---|---|---|
+| `ADMIN_TOKEN` | *(empty)* | When set, gates `/kb/*`, `/transcribe/`, and `/assist/` behind auth |
+| `GROQ_MODEL` | `openai/gpt-oss-20b` | Chat completion model |
+| `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Sentence Transformers model for RAG embeddings |
+| `KB_MIN_SIMILARITY` | `0.45` | Cosine similarity threshold — below this, the bot declines to answer |
+| `MAX_HISTORY_TURNS` | `5` | Number of conversation turns sent as LLM context |
+| `GROQ_TTS_MODEL` | `canopylabs/orpheus-v1-english` | TTS model |
+| `GROQ_TTS_VOICE` | `troy` | Default voice (`autumn`, `diana`, `hannah`, `austin`, `daniel`, `troy`) |
+| `RATE_LIMIT_MAX_REQUESTS` | `20` | Max requests per IP per minute for `/assist/` |
+| `RATE_LIMIT_MAX_TRANSCRIBE` | `10` | Max requests per IP per minute for `/transcribe/` |
+| `TRUST_PROXY_HEADERS` | `false` | Honor `X-Forwarded-For` for rate limiting (enable only behind a trusted proxy) |
+| `MAX_UPLOAD_BYTES` | `104857600` | Maximum upload size for `/transcribe/` (100 MB) |
+| `AUDIO_TTL_SEC` | `86400` | Prune TTS audio files older than this (seconds) |
+| `AUDIO_MAX_FILES` | `100` | Maximum TTS audio files to retain |
+| `HANDOFF_WEBHOOK_URL` | *(empty)* | POST ticket JSON when a human agent is needed |
+| `HANDOFF_EMAIL_TO` | *(empty)* | Fallback: send ticket via SMTP email |
+| `LOG_FORMAT` | `console` | `console` for human-readable output, `json` for structured JSON |
+| `LOG_LEVEL` | `INFO` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+| `LOG_QUIET_STATIC` | `true` | Suppress successful static asset logs in console mode |
+| `LOG_QUIET_HEALTH` | `true` | Suppress routine `/health` poll logs in console mode |
+
+---
+
+## API Reference
+
+### Core Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/transcribe/` | Upload audio → returns `{transcript, intent}` |
+| `POST` | `/assist/` | Submit transcript → returns `{response, ai_takeover, sources, audio_url, kb_score, handoff, ticket_id}` |
+| `GET` | `/voices` | List available TTS voices |
+| `GET` | `/health` | System health with per-service status |
+
+### Knowledge Base
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/kb` | Paginated list (`?limit&offset&include_deleted`) |
+| `GET` | `/kb/search?q=...` | Similarity test sandbox (bypasses threshold) |
+| `POST` | `/kb` | Create entry `{question?, response}` |
+| `PUT` | `/kb/{id}` | Update entry (re-embedded immediately) |
+| `DELETE` | `/kb/{id}` | Soft-delete (returns `undo_token`) |
+| `POST` | `/kb/{id}/restore` | Restore soft-deleted entry |
+| `POST` | `/kb/reload` | Force re-read from `knowledge_base.json` |
+| `GET` | `/kb/export` | Download KB as JSON file |
+| `POST` | `/kb/import` | Replace all entries from JSON upload |
+
+### Analytics & Handoff
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/stats` | Process-local usage counters |
+| `GET` | `/analytics/summary` | Usage totals with cost estimates |
+| `POST` | `/analytics/feedback` | Log thumbs-up/down rating |
+| `GET` | `/kb/unmatched` | Below-threshold queries for KB curation |
+| `GET` | `/handoff/queue` | Queued escalation tickets |
+| `POST` | `/handoff/queue/replay` | Retry failed ticket delivery |
+| `DELETE` | `/handoff/queue/{id}` | Dismiss a queued ticket |
+
+### Admin
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/kb-admin/login` | Authenticate with `ADMIN_TOKEN`, sets HttpOnly cookie |
+| `POST` | `/kb-admin/logout` | Clear admin session |
+
+> **Error Responses:** All errors return `{"detail": "..."}` with appropriate HTTP status codes — `413` (upload too large), `415` (unsupported format), `429` (rate limited, includes `Retry-After` header), `502` (upstream API failure), `504` (transcription timeout).
+
+### Request/Response Examples
+
+**Assist Request:**
+```json
+{
+  "transcript": "I need to reset my password and check my balance",
+  "intent": "password_reset",
+  "history": [
+    {"transcript": "Hello, I need help", "response": "Of course! How can I assist you today?"}
+  ]
+}
+```
+
+**Assist Response:**
+```json
+{
+  "response": "To reset your password, go to the login page and click 'Forgot Password'...",
+  "ai_takeover": true,
+  "source": "To reset your password...",
+  "sources": [
+    {"text": "To reset your password...", "score": 0.87},
+    {"text": "Log into your account dashboard...", "score": 0.72}
+  ],
+  "audio_url": "/static/audio/ai_response_20260921_174512_a1b2c3d4.wav",
+  "tts_engine": "orpheus",
+  "kb_score": 0.87,
+  "handoff": false,
+  "ticket_id": null
+}
+```
+
+---
+
+## Knowledge Base Management
+
+The knowledge base is stored in `knowledge_base.json` as a JSON array. Each entry contains:
+
+```json
+{
+  "id": "e4d8d1bc",
+  "question": "How do I reset my password?",
+  "response": "To reset your password, go to the login page, click 'Forgot Password'..."
+}
+```
+
+### How It Works
+
+- **Embeddings** are computed as `question + "\n" + response` using `all-MiniLM-L6-v2`, so both the user's phrasing and the answer contribute to matching accuracy.
+- **Incremental updates** — only new or modified entries are re-encoded; unchanged rows reuse cached vectors.
+- **Hot reload** — the server checks file mtime on every query. External edits to `knowledge_base.json` take effect immediately.
+- **Fail-safe** — invalid edits (malformed JSON, empty array) keep serving the last good state without crashing.
+- **Stable IDs** — assigned once and persisted back to the file atomically via `tempfile` + `os.replace`.
+- **Soft deletes** — entries are marked with `deleted_at` timestamps and can be restored via the API.
+
+### Admin Authentication
+
+When `ADMIN_TOKEN` is set in `.env`:
+
+- All `/kb/*` API endpoints require the token via `X-Admin-Token` header or admin session cookie.
+- `/static/kb.html` and `/static/analytics.html` display a login page for unauthenticated visitors.
+- Sign in via the form (`POST /kb-admin/login` sets an HttpOnly cookie).
+- When `ADMIN_TOKEN` is empty (local development), authentication is disabled.
+
+---
+
+## Logging & Observability
+
+### Console Mode (Default)
+
+Clean, human-readable one-line logs optimized for local development. Routine static asset requests and `/health` polls are filtered out automatically:
 
 ```
-app/
-├── main.py                    # FastAPI app lifespan, middleware registration, router inclusions
-├── config.py                  # single source of truth for env vars and tuning constants
-├── dependencies.py            # auth (require_admin), sliding-window rate limiting, audit logger
-├── middleware.py              # request_context (req_id contextvar, access logs, no-store headers)
-├── schemas.py                 # Pydantic models (AssistRequest, KBEntryRequest, FeedbackRequest)
-├── logging.py                 # JSON structured logger + per-request ID contextvar
-├── routes/
-│   ├── assist.py              # /transcribe/, /assist/, /voices
-│   ├── kb.py                  # /kb/* CRUD, import/export, /kb/search test sandbox
-│   ├── handoff.py             # /handoff/queue, replay, deletion
-│   ├── analytics.py           # /stats, /analytics/summary, /kb/unmatched, /analytics/feedback
-│   ├── admin.py               # /kb-admin/login, logout, session management
-│   └── health.py              # /health, root redirect
-└── services/
-    ├── transcription.py       # AssemblyAI upload + polling client (sync)
-    ├── intent.py              # keyword-based intent classifier (first-match-wins)
-    ├── rag.py                 # hot-reloadable knowledge base (SentenceTransformers embeddings + sandbox test)
-    ├── llm.py                 # Groq chat client (OpenAI-compatible)
-    ├── tts.py                 # Groq Orpheus TTS client with gTTS fallback + WAV normalizer
-    ├── handoff.py             # webhook & email escalation with disk queue & replay logic
-    └── analytics.py           # in-memory counters, JSONL event logging & feedback tracking
-main.py                        # thin shim so `uvicorn main:app` works
-static/                        # dashboard UI, KB manager, analytics dashboard, vendor libs, audio
-static/vendor/lame.all.js      # in-browser MP3 encoder for live mic recordings
-knowledge_base.json            # RAG corpus
-```
-
-## 🔌 API
-
-| Endpoint             | Body                        | Returns                                                      |
-|----------------------|-----------------------------|--------------------------------------------------------------|
-| `POST /transcribe/`  | multipart audio upload   | `{transcript, intent}`                                       |
-| `POST /assist/`      | `{transcript, intent, history?, voice?}` JSON | `{response, ai_takeover, source, sources, audio_url, tts_engine, kb_score, handoff, ticket_id}` |
-| `GET /voices`        | –                           | `{"default": "troy", "voices": [...]}`                       |
-| `GET /health`        | –                           | `{"status": "ok", "services": {api, rag, transcription, llm, tts, handoff}}` |
-| `GET /stats`         | –                           | `{counters, kb_count}` (process-local usage aggregates)      |
-| `GET /analytics/summary` | –                   | `{totals, llm, transcription, tts, rag, handoff, top_intents, recent_activity}` (usage & cost estimates) |
-| `POST /analytics/feedback` | `{"transcript", "positive", "assist_request_id?"}` JSON | `{"status": "ok"}`                                           |
-| `GET /kb/unmatched`  | `?limit`                    | `{count, unmatched: [{transcript, count, last_seen, intents, handoff, ticket_id, in_kb}]}` |
-| `GET /handoff/queue` | `?limit&offset`             | `{count, tickets: [{ticket_id, reason, transcript, ...}]}`  |
-| `POST /handoff/queue/replay` | `?ticket_id`        | `{success, ticket_id, remaining}` or `{replayed, failed, remaining}` |
-| `DELETE /handoff/queue/{id}` | –                   | `{"deleted": ticket_id}`                                     |
-| `GET /kb`            | `?limit&offset&include_deleted` | `{count, entries: [{id, question, response}], limit, offset}` |
-| `GET /kb/search`     | `?q=...`                    | `{matches: [{text, score}]}` (similarity test sandbox)       |
-| `GET /kb/export`     | –                           | JSON file download (`Content-Disposition: attachment`)       |
-| `POST /kb`           | `{question?, response}`     | created entry                                                |
-| `PUT /kb/{id}`       | `{question?, response}`     | updated entry (re-embedded immediately)                      |
-| `DELETE /kb/{id}`    | –                           | `{deleted, count, undo_token}` (soft-delete)                 |
-| `POST /kb/{id}/restore` | –                        | restored entry                                               |
-| `POST /kb/reload`    | –                           | `{reloaded, count}`                                          |
-| `POST /kb/import`    | `file` or JSON `[{question, response}]` | `{imported, count}` (replaces all, re-embeds) |
-
-`audio_url` is set only when `ai_takeover` is true (the response is spoken). `handoff` is true when a support ticket was opened (check `ticket_id`). Errors return a JSON `{"detail": "..."}` with an appropriate status code (502 for upstream API failures, 504 for transcription timeouts, 429 with a `Retry-After` header when over the per-IP rate limit). KB entries can also be edited by modifying `knowledge_base.json` directly - the server detects the change and re-embeds on the next request.
-
-`history` is optional: an array of prior `{transcript, response}` turns (the dashboard sends the last 5). The LLM sees them as conversation context. If the current query has no KB match but `history` is present, the bot answers from the earlier exchange instead of the canned "I'm not sure".
-
-`POST /transcribe/` enforces upload guards before any external API call: unsupported file extensions return **415** (audio/video allowlist matching AssemblyAI's formats), and files over `MAX_UPLOAD_BYTES` (default 100 MB) return **413**.
-
-**Admin auth:** if `ADMIN_TOKEN` is set in `.env`, the knowledge base is locked down:
-- `/kb/*` API requires it (via `X-Admin-Token` header **or** the admin cookie)
-- `/static/kb.html` shows a login page instead of the editor - sign in at the form (`POST /kb-admin/login` sets an `HttpOnly` cookie; `/kb-admin/logout` clears it)
-- When `ADMIN_TOKEN` is empty (local dev), everything stays open.
-
-## 📝 Logging
-
-By default, the terminal displays clean, human-readable one-line logs tailored for local development with noise filtering (suppressing routine static asset traffic and repetitive `/health` polls, while highlighting API calls, handoffs, and errors):
-
-```text
 17:45:12 [INFO ] POST /transcribe/ -> 200 (340.5ms) [req=4b2c3d12]
 17:45:13 [INFO ] POST /assist/     -> 200 (112.8ms) [req=5c3d4e34]
-17:45:14 [INFO ] POST /assist/     -> 200 (105.2ms) [req=6d4e5f56] [ticket_id=ticket_123, reason=no_match]
+17:45:14 [INFO ] POST /assist/     -> 200 (105.2ms) [req=6d4e5f56, ticket_id=tkt_123]
 ```
 
-For production environments or log aggregators (Datadog, Loki, CloudWatch), set `LOG_FORMAT=json` in `.env` to emit structured JSON lines to stdout:
+### JSON Mode (Production)
+
+Set `LOG_FORMAT=json` to emit structured JSON lines for log aggregators (Datadog, Loki, CloudWatch):
 
 ```json
 {"ts": "2026-09-21T17:45:12.123+00:00", "level": "INFO", "logger": "app.access", "message": "request completed", "req_id": "4b2c3d12", "req_method": "POST", "req_path": "/transcribe/", "req_status": 200, "req_duration_ms": 340.5}
 ```
 
-Every request echoes back `req_id` as the `X-Request-ID` HTTP header for end-to-end tracing. Routine static asset and health check console filtering can be toggled via `LOG_QUIET_STATIC=true` and `LOG_QUIET_HEALTH=true`. Any code can read the current request ID via `app.logging.get_request_id()`.
+### Request Tracing
 
-### Test without a microphone
+Every request is assigned a unique `req_id` and returned as the `X-Request-ID` HTTP header for end-to-end tracing. Access the current ID programmatically via `app.logging.get_request_id()`.
+
+---
+
+## Testing
 
 ```bash
-curl -X POST http://127.0.0.1:8000/assist/ \
-  -H "Content-Type: application/json" \
-  -d '{"transcript": "How do I reset my password?", "intent": "password_reset"}'
+# Install test dependencies
+pip install -r requirements-dev.txt
+
+# Run the full suite
+python -m pytest -q
 ```
 
-Then open the returned `audio_url`. Sample recordings for `/transcribe/` are in `audio_sample/` (note: these are MP3s with a `.wav` extension).
+**163 tests** run fully offline — all external APIs (AssemblyAI, Groq) and the embedding model are mocked. The suite covers:
+
+- Intent detection with word-boundary edge cases
+- RAG retrieval: threshold behavior, incremental reload, question+response re-embedding, fail-open on broken files, ID stability
+- TTS: Markdown stripping, WAV normalization, Orpheus/gTTS fallback, audio pruning
+- API surface: upload guards (413/415), rate limiting with `Retry-After`, proxy header handling, admin auth
+- Handoff: webhook retry, email fallback, disk queue
+- Analytics: event logging, counters, feedback tracking
+- Logging: ConsoleFormatter, JsonFormatter, noise filtering
+- KB operations: CRUD, soft-delete/restore, import/export, audit log
+
+CI runs the suite automatically on every push to `main` and on pull requests via [GitHub Actions](https://github.com/GuptaAman12/agent-assist-bot/actions).
+
+---
+
+## Project Structure
+
+```
+agent-assist-bot/
+├── app/
+│   ├── main.py                 # FastAPI app, lifespan, middleware, router registration
+│   ├── config.py               # All env vars, paths, constants, intent keywords
+│   ├── dependencies.py         # Auth, rate limiting, audit logging, admin sessions
+│   ├── middleware.py            # Request context (X-Request-ID), access logs, admin page guard
+│   ├── schemas.py              # Pydantic models (AssistRequest, KBEntryRequest, FeedbackRequest)
+│   ├── logging.py              # ConsoleFormatter, JsonFormatter, noise filter, request ID contextvar
+│   ├── routes/
+│   │   ├── assist.py           # POST /transcribe/, POST /assist/, GET /voices
+│   │   ├── kb.py               # /kb/* CRUD, search sandbox, import/export, reload
+│   │   ├── handoff.py          # /handoff/queue — inspect, replay, delete
+│   │   ├── analytics.py        # /stats, /analytics/summary, /kb/unmatched, feedback
+│   │   ├── admin.py            # /kb-admin/login, /kb-admin/logout, session management
+│   │   └── health.py           # GET /health, root redirect
+│   └── services/
+│       ├── transcription.py    # AssemblyAI upload + polling (sync)
+│       ├── intent.py           # Regex-based intent classifier
+│       ├── rag.py              # Hot-reloadable vector KB (SentenceTransformers + PyTorch)
+│       ├── llm.py              # Groq chat client with mojibake repair
+│       ├── tts.py              # Groq Orpheus TTS + gTTS fallback + WAV normalizer
+│       ├── handoff.py          # Webhook/SMTP escalation with retry and disk queue
+│       └── analytics.py        # In-memory counters, JSONL event logging, cost estimates
+├── static/
+│   ├── index.html              # Agent dashboard (dual view, waveform, sentiment, draft-edit)
+│   ├── script.js               # Dashboard logic, mic recording, MP3 encoding, chat timeline
+│   ├── kb.html                 # Knowledge base manager (search, test, import/export)
+│   ├── kb.js                   # KB manager logic, pagination, unmatched feed
+│   ├── analytics.html          # Usage & cost analytics dashboard
+│   ├── analytics.js            # Analytics charts and data fetching
+│   ├── style.css               # Shared styles, dark/light themes, responsive layout
+│   ├── theme.js                # Theme persistence (localStorage + system preference)
+│   └── vendor/lame.all.js      # In-browser MP3 encoder for mic recordings
+├── tests/                      # 163 offline tests (mocked APIs, fake embedding model)
+├── audio_sample/               # Pre-recorded test audio files
+├── knowledge_base.json         # RAG corpus (17 entries, hot-reloadable)
+├── main.py                     # Thin shim: `from app.main import app`
+├── Dockerfile                  # Python 3.10-slim, CPU-only PyTorch, non-root user
+├── docker-compose.yml          # One-command deployment with HF cache volume
+├── .github/workflows/ci.yml   # GitHub Actions CI (pytest on every push)
+├── requirements.txt            # Runtime dependencies (pinned)
+└── requirements-dev.txt        # Test dependencies (pytest + httpx)
+```
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/my-feature`)
+3. Make your changes and ensure tests pass (`python -m pytest -q`)
+4. Commit and push (`git push origin feature/my-feature`)
+5. Open a Pull Request
+
+Please ensure all existing tests continue to pass and add tests for new functionality.
+
+---
+
+Built with ❤️ by [Aman Gupta](https://github.com/GuptaAman12)
