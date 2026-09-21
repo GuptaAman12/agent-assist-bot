@@ -97,34 +97,34 @@ The platform ships with three integrated web interfaces: an **agent dashboard** 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                          Client (Browser)                               │
-│  ┌──────────────┐  ┌───────────────┐  ┌────────────────────────────┐   │
-│  │  Dashboard    │  │  KB Manager   │  │  Analytics Dashboard       │   │
-│  │  index.html   │  │  kb.html      │  │  analytics.html            │   │
-│  └──────┬───────┘  └──────┬────────┘  └───────────┬────────────────┘   │
-└─────────┼──────────────────┼──────────────────────┼────────────────────┘
-          │                  │                      │
-          ▼                  ▼                      ▼
+│  ┌───────────────┐  ┌───────────────┐  ┌────────────────────────────┐   │
+│  │   Dashboard   │  │  KB Manager   │  │    Analytics Dashboard     │   │
+│  │  index.html   │  │    kb.html    │  │       analytics.html       │   │
+│  └───────┬───────┘  └───────┬───────┘  └─────────────┬──────────────┘   │
+└──────────┼──────────────────┼────────────────────────┼──────────────────┘
+           │                  │                        │
+           ▼                  ▼                        ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                        FastAPI Application                              │
 │                                                                         │
-│  Routes:  /transcribe/  /assist/  /kb/*  /handoff/*  /analytics/*      │
+│  Routes:  /transcribe/   /assist/   /kb/*   /handoff/*   /analytics/*   │
 │                                                                         │
 │  Middleware: request_context (X-Request-ID, access logs)                │
 │              guard_admin_pages (auth gate on KB/analytics)              │
 │                                                                         │
 │  ┌──────────────────────────────────────────────────────────────────┐   │
 │  │                         Services Layer                           │   │
-│  │  ┌──────────────┐ ┌─────────┐ ┌─────────┐ ┌──────────────────┐ │   │
-│  │  │ Transcription │ │  Intent │ │   RAG   │ │       LLM        │ │   │
-│  │  │ (AssemblyAI)  │ │ Detect  │ │  (ST)   │ │   (Groq Chat)    │ │   │
-│  │  └──────────────┘ └─────────┘ └─────────┘ └──────────────────┘ │   │
-│  │  ┌──────────────┐ ┌──────────────┐ ┌────────────────────────┐  │   │
-│  │  │     TTS      │ │   Handoff    │ │      Analytics         │  │   │
-│  │  │(Orpheus/gTTS)│ │(Webhook/SMTP)│ │  (Counters + JSONL)    │  │   │
-│  │  └──────────────┘ └──────────────┘ └────────────────────────┘  │   │
+│  │  ┌───────────────┐  ┌──────────┐  ┌────────┐  ┌───────────────┐  │   │
+│  │  │ Transcription │  │  Intent  │  │  RAG   │  │      LLM      │  │   │
+│  │  │ (AssemblyAI)  │  │  Detect  │  │  (ST)  │  │  (Groq Chat)  │  │   │
+│  │  └───────────────┘  └──────────┘  └────────┘  └───────────────┘  │   │
+│  │  ┌───────────────┐  ┌───────────────┐  ┌──────────────────────┐  │   │
+│  │  │      TTS      │  │    Handoff    │  │      Analytics       │  │   │
+│  │  │(Orpheus/gTTS) │  │(Webhook/SMTP) │  │  (Counters + JSONL)  │  │   │
+│  │  └───────────────┘  └───────────────┘  └──────────────────────┘  │   │
 │  └──────────────────────────────────────────────────────────────────┘   │
 │                                                                         │
-│  Data:  knowledge_base.json (RAG corpus, hot-reloadable)               │
+│  Data:  knowledge_base.json (RAG corpus, hot-reloadable)                │
 │         *.log.jsonl (audit, analytics, handoff queue)                   │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
