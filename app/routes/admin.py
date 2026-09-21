@@ -22,11 +22,11 @@ def _login_page(error: str | None = None) -> str:
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css?v=62">
+<link rel="stylesheet" href="/static/style.css?v=67">
 <script>(function(){{var t=null;try{{t=localStorage.getItem('theme')}}catch(e){{}}var d=t==='dark'||(!t&&window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.setAttribute('data-theme',d?'dark':'light')}})();</script>
 </head>
 <body>
-<header class="topbar"><div class="brand"><span class="brand-mark">K</span><span class="brand-name">Agent Assist</span><span class="brand-tag">Admin</span></div></header>
+<header class="topbar"><a href="/static/index.html" class="brand" title="Go to Dashboard"><span class="brand-mark">K</span><span class="brand-name">Agent Assist</span><span class="brand-tag">Admin</span></a></header>
 <main style="max-width:380px;margin:80px auto;padding:0 18px;">
   <section class="card">
     <h2 class="card-title">Knowledge base login</h2>
