@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=64">
+  <link rel="stylesheet" href="/static/style.css?v=66">
 </head>
 <body>
   <header class="topbar">
@@ -71,10 +71,16 @@
             <button type="button" id="file-clear" class="chip-x" aria-label="Remove selected file" title="Remove selected file">&times;</button>
           </div>
           <div class="voice-selector-wrap">
-            <label for="voice-select" class="voice-select-label">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-              Voice Persona
-            </label>
+            <div class="voice-selector-header">
+              <label for="voice-select" class="voice-select-label">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                Voice Persona
+              </label>
+              <label class="autoplay-toggle-wrap" title="Automatically play generated AI voice response">
+                <input type="checkbox" id="autoplay-toggle" checked />
+                <span>Autoplay</span>
+              </label>
+            </div>
             <select id="voice-select" class="voice-select" title="Select AI speech synthesis persona">
               <option value="troy" selected>Troy &bull; Warm &amp; Clear</option>
               <option value="autumn">Autumn &bull; Expressive &amp; Friendly</option>
@@ -112,6 +118,25 @@
     </aside>
 
     <section class="results">
+      <div class="results-toolbar" id="results-toolbar" hidden>
+        <div class="view-mode-group" role="group" aria-label="Display mode">
+          <button type="button" class="view-mode-btn active" id="view-cards-btn" data-view="cards" title="Inspector Card View">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+            <span>Cards View</span>
+          </button>
+          <button type="button" class="view-mode-btn" id="view-chat-btn" data-view="chat" title="Continuous Conversational Stream">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            <span>Chat Stream</span>
+          </button>
+        </div>
+        <div class="results-toolbar-actions">
+          <button type="button" id="export-transcript-btn" class="btn-ghost btn-small" title="Export conversation log as Markdown">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>Export Log</span>
+          </button>
+        </div>
+      </div>
+
       <div id="empty-state" class="card empty-state">
         <div class="empty-state-icon-wrap" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" y1="18" x2="12" y2="22"/></svg>
@@ -138,7 +163,10 @@
         <div class="card result-card">
           <div class="result-head">
             <h2 class="card-title">Transcript</h2>
-            <span id="intent-badge" class="intent-badge"></span>
+            <div class="transcript-badges">
+              <span id="sentiment-pill" class="sentiment-pill" hidden></span>
+              <span id="intent-badge" class="intent-badge"></span>
+            </div>
           </div>
           <blockquote id="transcript" class="transcript"></blockquote>
           <div class="meta-row">
@@ -150,10 +178,26 @@
 
         <div class="card result-card">
           <div class="result-head">
-            <h2 class="card-title">AI suggested response</h2>
-            <button type="button" id="copy-btn" class="btn-ghost btn-small" title="Copy the AI response text to clipboard">Copy</button>
+            <div class="response-title-wrap">
+              <h2 class="card-title">AI suggested response</h2>
+              <span id="edited-indicator" class="badge-edited" hidden>Edited</span>
+            </div>
+            <div class="response-head-actions">
+              <button type="button" id="edit-draft-btn" class="btn-ghost btn-small" title="Edit draft response before copying">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                <span>Edit draft</span>
+              </button>
+              <button type="button" id="copy-btn" class="btn-ghost btn-small" title="Copy the AI response text to clipboard">Copy</button>
+            </div>
           </div>
           <div id="response" class="response-prose"></div>
+          <div id="response-edit-wrap" class="response-edit-wrap" hidden>
+            <textarea id="response-edit-input" class="response-edit-textarea" rows="4" placeholder="Edit the assistant draft response..."></textarea>
+            <div class="response-edit-actions">
+              <button type="button" id="save-draft-btn" class="btn-primary btn-small">Save Draft</button>
+              <button type="button" id="cancel-draft-btn" class="btn-ghost btn-small">Cancel</button>
+            </div>
+          </div>
           <div class="feedback-row" id="feedback-row" hidden>
             <span class="feedback-prompt">Was this helpful?</span>
             <button type="button" class="icon-btn feedback-btn" id="feedback-up" title="Helpful" aria-label="Thumbs up">
@@ -175,6 +219,11 @@
           <div class="result-head">
             <h2 class="card-title">AI voice response</h2>
             <div class="audio-header-actions">
+              <button type="button" id="audio-mute-btn" class="btn-ghost btn-small audio-mute-btn" title="Toggle audio mute">
+                <svg id="mute-icon-unmuted" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                <svg id="mute-icon-muted" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+                <span id="mute-btn-text">Mute</span>
+              </button>
               <div class="audio-speed-group" role="group" aria-label="Playback speed">
                 <button type="button" class="speed-btn active" data-speed="1" title="Normal speed (1x)">1x</button>
                 <button type="button" class="speed-btn" data-speed="1.25" title="1.25x speed">1.25x</button>
@@ -187,15 +236,32 @@
               </a>
             </div>
           </div>
-          <audio id="audio-player" controls></audio>
+          <div class="voice-player-container">
+            <audio id="audio-player" controls></audio>
+            <div class="voice-wave-container" title="Active speech waveform">
+              <canvas id="voice-visualizer" class="voice-visualizer" width="140" height="32" aria-hidden="true"></canvas>
+            </div>
+          </div>
           <p id="tts-engine-note" class="engine-note"></p>
         </div>
+      </div>
+
+      <!-- Conversational Chat Stream Timeline Panel -->
+      <div id="chat-timeline-panel" class="card chat-timeline-card" hidden>
+        <div class="chat-timeline-header">
+          <div class="chat-timeline-title-wrap">
+            <h2 class="card-title">Live Conversation Stream</h2>
+            <span id="chat-count-badge" class="chat-count-badge">0 turns</span>
+          </div>
+          <span class="chat-timeline-hint">Real-time caller &amp; AI dialogue</span>
+        </div>
+        <div id="chat-stream-list" class="chat-stream-list"></div>
       </div>
     </section>
   </main>
 
   <script src="/static/vendor/lame.all.js?v=1"></script>
   <script src="/static/theme.js?v=1"></script>
-  <script src="/static/script.js?v=52"></script>
+  <script src="/static/script.js?v=53"></script>
 </body>
 </html>

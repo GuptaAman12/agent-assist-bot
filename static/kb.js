@@ -689,3 +689,39 @@ if (testInput && testResults) {
     }, 300);
   });
 }
+
+/* Sidebar Tool Tabs (Test Match / Needs Answer / Queue) */
+const tabButtons = document.querySelectorAll('.kb-side-tab-btn');
+const tabPanes = {
+  test: document.getElementById('pane-test'),
+  unmatched: document.getElementById('pane-unmatched'),
+  queue: document.getElementById('pane-queue'),
+};
+
+if (tabButtons.length) {
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabButtons.forEach(b => {
+        b.classList.remove('active');
+        b.setAttribute('aria-selected', 'false');
+      });
+      btn.classList.add('active');
+      btn.setAttribute('aria-selected', 'true');
+
+      const target = btn.dataset.tab;
+      Object.entries(tabPanes).forEach(([name, pane]) => {
+        if (pane) {
+          pane.hidden = name !== target;
+          pane.classList.toggle('active', name === target);
+        }
+      });
+
+      if (target === 'unmatched') loadUnmatched();
+      if (target === 'queue') loadQueue();
+      if (target === 'test') {
+        const testIn = document.getElementById('kb-test-input');
+        if (testIn) testIn.focus();
+      }
+    });
+  });
+}

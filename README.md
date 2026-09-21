@@ -19,8 +19,16 @@ A real-time customer support system that transcribes live audio, detects user in
 - 🤖 AI takeover: automatable intents are answered aloud by a realistic neural voice (**Groq Orpheus**), with automatic gTTS fallback. If a recording mentions **any** automatable intent, the bot takes over and speaks.
 - 🔒 **Rate limiting + auth** on `/transcribe/` and `/assist/` (when `ADMIN_TOKEN` is set) so the credit-burning endpoints can't be abused anonymously. Over-limit responses carry a `Retry-After` header; set `TRUST_PROXY_HEADERS=true` only behind a trusted reverse proxy so limits key off `X-Forwarded-For`.
 - 🧹 **TTS audio pruning** - generated voice files in `static/audio/` are evicted past `AUDIO_TTL_SEC` / `AUDIO_MAX_FILES` (checked at startup and after each synthesis), so the disk can't fill up unattended.
-- 🖥️ Modern dashboard: light/dark mode, session history that survives page navigation (stored in `sessionStorage`), markdown-rendered responses, live system status pill with service health popover and pulsing indicator, copy-to-clipboard.
-- 📚 Knowledge base manager at `/static/kb.html`: global search (spans all pages), live usage analytics summary, unmatched queries curation feed with 1-click 'Add to KB', inline editing, soft-delete with undo, paginated list (`?limit&offset`), import/export (bulk JSON), reload from disk, live system status indicator.
+- 🖥️ **Modern dashboard with dual view modes**:
+  - **Cards View**: Inspector cards with transcript, confidence, sources, audio player, and feedback.
+  - **Chat Stream View**: Live continuous dialogue timeline where customer utterances and AI voice answers flow naturally with timestamps and sentiment tags.
+- 🌊 **Active Voice Waveform Visualizer** - Real-time frequency waveform animation on canvas while the AI assistant speaks.
+- ✍️ **Human-in-the-loop "Draft & Edit" Mode** - Agents can tweak the AI draft directly in-place with revision indicators before copying or resolving.
+- 🎯 **Sentiment & Frustration Meter** - Automatic customer emotion detection (Satisfied 🟢, Neutral ⚪, Frustrated 🟠, Urgent/Escalated 🔴) displayed on caller transcripts.
+- 🔊 **Global Autoplay & Audio Mute** - Granular audio controls persisted across sessions in `localStorage`.
+- 👍 **User Feedback Loop** - Instant helpful/unhelpful rating on responses logged to `analytics.log.jsonl`.
+- 📁 **One-Click Call Log Export** - Export complete dialog sessions as clean Markdown reports.
+- 📚 Knowledge base manager at `/static/kb.html`: global search, **live similarity test sandbox** (`GET /kb/search`), usage analytics summary, unmatched queries curation feed with 1-click 'Add to KB', inline editing, soft-delete with undo, paginated list (`?limit&offset`), import/export (bulk JSON), reload from disk, live system status indicator.
 - 📝 **Audit log** (`knowledge_base.log.jsonl`): every admin KB write is appended with timestamp, request ID, and admin identity - never blocks the request.
 - 📊 **Usage analytics & cost dashboard** (`analytics.log.jsonl` + `/static/analytics.html` + `GET /analytics/summary`): tracks LLM prompt/completion token usage, voice synthesis character volume, audio transcription duration, RAG match rates, and real-time infrastructure cost estimations across all services with a dedicated analytics dashboard.
 
@@ -103,7 +111,7 @@ pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-155 tests cover intent detection (incl. word-boundary behavior), hybrid retrieval (BM25 + dense semantic search), KB hot-reload behavior (threshold, external edits, broken-file fail-open, ID stability, question+response re-embedding, admin auth), TTS stripping/normalization/fallback/pruning, AssemblyAI/Groq error paths, upload guards, handoff retry/queue, rate-limit `Retry-After` + proxy headers, analytics events/counters/`/stats`, audit log, import/export, and the full API surface - all external calls and the embedding model are mocked, so tests run offline and fast. CI runs them on every push (`.github/workflows/ci.yml`).
+156 tests cover intent detection (incl. word-boundary behavior), hybrid retrieval (BM25 + dense semantic search), KB hot-reload behavior (threshold, external edits, broken-file fail-open, ID stability, question+response re-embedding, admin auth), TTS stripping/normalization/fallback/pruning, AssemblyAI/Groq error paths, upload guards, handoff retry/queue, rate-limit `Retry-After` + proxy headers, analytics events/counters/`/stats`, audit log, import/export, and the full API surface - all external calls and the embedding model are mocked, so tests run offline and fast. CI runs them on every push (`.github/workflows/ci.yml`).
 
 ## 🐳 Docker
 
@@ -132,19 +140,29 @@ docker run -p 8000:8000 --env-file .env -v hf_cache:/app/.hf_cache agent-assist-
 
 ```
 app/
-├── main.py                    # FastAPI routes, lifespan, request_context middleware, guards
+├── main.py                    # FastAPI app lifespan, middleware registration, router inclusions
 ├── config.py                  # single source of truth for env vars and tuning constants
+├── dependencies.py            # auth (require_admin), sliding-window rate limiting, audit logger
+├── middleware.py              # request_context (req_id contextvar, access logs, no-store headers)
+├── schemas.py                 # Pydantic models (AssistRequest, KBEntryRequest, FeedbackRequest)
 ├── logging.py                 # JSON structured logger + per-request ID contextvar
+├── routes/
+│   ├── assist.py              # /transcribe/, /assist/, /voices
+│   ├── kb.py                  # /kb/* CRUD, import/export, /kb/search test sandbox
+│   ├── handoff.py             # /handoff/queue, replay, deletion
+│   ├── analytics.py           # /stats, /analytics/summary, /kb/unmatched, /analytics/feedback
+│   ├── admin.py               # /kb-admin/login, logout, session management
+│   └── health.py              # /health, root redirect
 └── services/
     ├── transcription.py       # AssemblyAI upload + polling client (sync)
     ├── intent.py              # keyword-based intent classifier (first-match-wins)
-    ├── rag.py                 # hot-reloadable knowledge base (BM25 + SentenceTransformers embeddings)
-    ├── llm.py                 # Groq chat client (Llama 3.3 70B Versatile, OpenAI-compatible)
+    ├── rag.py                 # hot-reloadable knowledge base (SentenceTransformers embeddings + sandbox test)
+    ├── llm.py                 # Groq chat client (OpenAI-compatible)
     ├── tts.py                 # Groq Orpheus TTS client with gTTS fallback + WAV normalizer
     ├── handoff.py             # webhook & email escalation with disk queue & replay logic
-    └── analytics.py           # in-memory counters, JSONL event logging & unmatched query tracking
+    └── analytics.py           # in-memory counters, JSONL event logging & feedback tracking
 main.py                        # thin shim so `uvicorn main:app` works
-static/                        # dashboard UI, KB manager page, vendor libs, generated audio
+static/                        # dashboard UI, KB manager, analytics dashboard, vendor libs, audio
 static/vendor/lame.all.js      # in-browser MP3 encoder for live mic recordings
 knowledge_base.json            # RAG corpus
 ```
@@ -154,15 +172,18 @@ knowledge_base.json            # RAG corpus
 | Endpoint             | Body                        | Returns                                                      |
 |----------------------|-----------------------------|--------------------------------------------------------------|
 | `POST /transcribe/`  | multipart audio upload   | `{transcript, intent}`                                       |
-| `POST /assist/`      | `{transcript, intent, history?}` JSON | `{response, ai_takeover, source, sources, audio_url, tts_engine, kb_score, handoff, ticket_id}` |
+| `POST /assist/`      | `{transcript, intent, history?, voice?}` JSON | `{response, ai_takeover, source, sources, audio_url, tts_engine, kb_score, handoff, ticket_id}` |
+| `GET /voices`        | –                           | `{"default": "troy", "voices": [...]}`                       |
 | `GET /health`        | –                           | `{"status": "ok", "services": {api, rag, transcription, llm, tts, handoff}}` |
 | `GET /stats`         | –                           | `{counters, kb_count}` (process-local usage aggregates)      |
 | `GET /analytics/summary` | –                   | `{totals, llm, transcription, tts, rag, handoff, top_intents, recent_activity}` (usage & cost estimates) |
+| `POST /analytics/feedback` | `{"transcript", "positive", "assist_request_id?"}` JSON | `{"status": "ok"}`                                           |
 | `GET /kb/unmatched`  | `?limit`                    | `{count, unmatched: [{transcript, count, last_seen, intents, handoff, ticket_id, in_kb}]}` |
 | `GET /handoff/queue` | `?limit&offset`             | `{count, tickets: [{ticket_id, reason, transcript, ...}]}`  |
 | `POST /handoff/queue/replay` | `?ticket_id`        | `{success, ticket_id, remaining}` or `{replayed, failed, remaining}` |
 | `DELETE /handoff/queue/{id}` | –                   | `{"deleted": ticket_id}`                                     |
 | `GET /kb`            | `?limit&offset&include_deleted` | `{count, entries: [{id, question, response}], limit, offset}` |
+| `GET /kb/search`     | `?q=...`                    | `{matches: [{text, score}]}` (similarity test sandbox)       |
 | `GET /kb/export`     | –                           | JSON file download (`Content-Disposition: attachment`)       |
 | `POST /kb`           | `{question?, response}`     | created entry                                                |
 | `PUT /kb/{id}`       | `{question?, response}`     | updated entry (re-embedded immediately)                      |

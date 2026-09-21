@@ -40,18 +40,72 @@ const els = {
   recordStopBtn: document.getElementById('record-stop-btn'),
   recordVisualizer: document.getElementById('record-visualizer'),
   voiceSelect: document.getElementById('voice-select'),
-  audioDownloadBtn: document.getElementById('audio-download-btn')
+  audioDownloadBtn: document.getElementById('audio-download-btn'),
+  resultsToolbar: document.getElementById('results-toolbar'),
+  viewCardsBtn: document.getElementById('view-cards-btn'),
+  viewChatBtn: document.getElementById('view-chat-btn'),
+  exportTranscriptBtn: document.getElementById('export-transcript-btn'),
+  autoplayToggle: document.getElementById('autoplay-toggle'),
+  sentimentPill: document.getElementById('sentiment-pill'),
+  editedIndicator: document.getElementById('edited-indicator'),
+  editDraftBtn: document.getElementById('edit-draft-btn'),
+  responseEditWrap: document.getElementById('response-edit-wrap'),
+  responseEditInput: document.getElementById('response-edit-input'),
+  saveDraftBtn: document.getElementById('save-draft-btn'),
+  cancelDraftBtn: document.getElementById('cancel-draft-btn'),
+  audioMuteBtn: document.getElementById('audio-mute-btn'),
+  muteIconUnmuted: document.getElementById('mute-icon-unmuted'),
+  muteIconMuted: document.getElementById('mute-icon-muted'),
+  muteBtnText: document.getElementById('mute-btn-text'),
+  voiceVisualizer: document.getElementById('voice-visualizer'),
+  chatTimelinePanel: document.getElementById('chat-timeline-panel'),
+  chatCountBadge: document.getElementById('chat-count-badge'),
+  chatStreamList: document.getElementById('chat-stream-list')
 };
 
 let history = [];
 let activeIndex = -1;
 let current = null;
+let currentView = localStorage.getItem('agent_view_mode') || 'cards';
+let isVoiceMuted = localStorage.getItem('agent_muted') === 'true';
+let voicePlayAnimId = null;
 
 let mediaRecorder = null;
 let mediaStream = null;
 let mediaChunks = [];
 let recordStartTime = 0;
 let recordTimerId = null;
+
+function detectSentiment(text) {
+  const t = (text || '').toLowerCase();
+  const urgentKeywords = [
+    'urgent', 'immediately', 'asap', 'emergency', 'manager', 'supervisor',
+    'lawyer', 'legal', 'sue', 'police', 'fraud', 'scam', 'stolen',
+    'unacceptable', 'worst service', 'ridiculous', 'robbed'
+  ];
+  if (urgentKeywords.some(w => t.includes(w))) {
+    return { label: 'Urgent', class: 'sentiment-urgent', emoji: '🔴' };
+  }
+
+  const frustratedKeywords = [
+    'angry', 'annoyed', 'terrible', 'horrible', 'awful', 'waste',
+    'useless', 'broken', 'failed', 'never works', 'disappointed', 'fed up',
+    'hate', 'garbage', 'trash', 'screwed', 'lied', 'stupid', 'not working'
+  ];
+  if (frustratedKeywords.some(w => t.includes(w))) {
+    return { label: 'Frustrated', class: 'sentiment-frustrated', emoji: '🟠' };
+  }
+
+  const positiveKeywords = [
+    'thank', 'thanks', 'great', 'awesome', 'excellent', 'wonderful',
+    'perfect', 'helpful', 'appreciate', 'love', 'good job', 'solved', 'works now'
+  ];
+  if (positiveKeywords.some(w => t.includes(w))) {
+    return { label: 'Satisfied', class: 'sentiment-positive', emoji: '🟢' };
+  }
+
+  return { label: 'Neutral', class: 'sentiment-neutral', emoji: '⚪' };
+}
 
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, c => ({
@@ -263,14 +317,42 @@ function showResult(item) {
   renderHistory();
 
   els.emptyState.hidden = true;
-  els.resultPanel.hidden = false;
+  if (els.resultsToolbar) els.resultsToolbar.hidden = false;
+
+  if (currentView === 'cards') {
+    els.resultPanel.hidden = false;
+    if (els.chatTimelinePanel) els.chatTimelinePanel.hidden = true;
+  } else {
+    els.resultPanel.hidden = true;
+    if (els.chatTimelinePanel) {
+      els.chatTimelinePanel.hidden = false;
+      renderChatStream();
+    }
+  }
 
   els.transcript.textContent = item.transcript;
   els.intentBadge.textContent = item.intent.replace(/_/g, ' ');
+
+  const sentiment = item.sentiment || detectSentiment(item.transcript);
+  item.sentiment = sentiment;
+  if (els.sentimentPill) {
+    els.sentimentPill.className = 'sentiment-pill ' + sentiment.class;
+    els.sentimentPill.textContent = `${sentiment.emoji} ${sentiment.label}`;
+    els.sentimentPill.hidden = false;
+  }
+
   els.takeoverPill.textContent = item.aiTakeover ? 'AI voice takeover' : 'Agent assisted';
   els.takeoverPill.className = 'takeover-pill ' + (item.aiTakeover ? 'takeover-yes' : 'takeover-no');
   els.timestamp.textContent = new Date(item.at).toLocaleString();
   els.response.innerHTML = item.responseHtml;
+
+  if (els.editedIndicator) {
+    els.editedIndicator.hidden = !item.edited;
+  }
+  if (els.responseEditWrap) {
+    els.responseEditWrap.hidden = true;
+    els.response.hidden = false;
+  }
 
   const feedbackRow = document.getElementById('feedback-row');
   if (feedbackRow) {
@@ -333,6 +415,8 @@ function showResult(item) {
     const activeSpeedBtn = document.querySelector('.speed-btn.active');
     const speed = activeSpeedBtn ? parseFloat(activeSpeedBtn.dataset.speed) || 1 : 1;
     els.audioPlayer.playbackRate = speed;
+    els.audioPlayer.muted = isVoiceMuted;
+    updateMuteUI(isVoiceMuted);
 
     if (els.audioDownloadBtn) {
       els.audioDownloadBtn.href = item.audioUrl;
@@ -340,6 +424,11 @@ function showResult(item) {
       els.audioDownloadBtn.download = `ai_voice_${safeIntent}.wav`;
     }
     els.audioPlayer.load();
+
+    const shouldAutoplay = els.autoplayToggle ? els.autoplayToggle.checked : true;
+    if (shouldAutoplay && !isVoiceMuted) {
+      els.audioPlayer.play().catch(() => {});
+    }
   } else {
     els.audioCard.hidden = true;
     els.audioPlayer.removeAttribute('src');
@@ -361,6 +450,350 @@ els.copyBtn.addEventListener('click', async () => {
   }
   setTimeout(() => els.copyBtn.textContent = 'Copy', 2000);
 });
+
+/* Human Agent Draft & Edit Mode */
+if (els.editDraftBtn) {
+  els.editDraftBtn.addEventListener('click', () => {
+    if (!current) return;
+    const isHidden = els.responseEditWrap.hidden;
+    if (isHidden) {
+      els.responseEditInput.value = current.responseRaw || '';
+      els.responseEditWrap.hidden = false;
+      els.response.hidden = true;
+      els.responseEditInput.focus();
+    } else {
+      els.responseEditWrap.hidden = true;
+      els.response.hidden = false;
+    }
+  });
+}
+
+if (els.cancelDraftBtn) {
+  els.cancelDraftBtn.addEventListener('click', () => {
+    els.responseEditWrap.hidden = true;
+    els.response.hidden = false;
+  });
+}
+
+if (els.saveDraftBtn) {
+  els.saveDraftBtn.addEventListener('click', () => {
+    if (!current) return;
+    const updated = els.responseEditInput.value.trim();
+    if (!updated) return;
+    current.responseRaw = updated;
+    current.responseHtml = renderMarkdown(updated);
+    current.edited = true;
+    els.response.innerHTML = current.responseHtml;
+    if (els.editedIndicator) els.editedIndicator.hidden = false;
+    els.responseEditWrap.hidden = true;
+    els.response.hidden = false;
+    saveSessionState();
+    if (currentView === 'chat') renderChatStream();
+  });
+}
+
+/* Audio Mute & Autoplay Setup */
+function updateMuteUI(muted) {
+  if (els.muteIconUnmuted && els.muteIconMuted && els.muteBtnText) {
+    els.muteIconUnmuted.hidden = muted;
+    els.muteIconMuted.hidden = !muted;
+    els.muteBtnText.textContent = muted ? 'Unmute' : 'Mute';
+    if (els.audioMuteBtn) {
+      els.audioMuteBtn.title = muted ? 'Unmute audio playback' : 'Mute audio playback';
+    }
+  }
+}
+
+if (els.audioMuteBtn) {
+  els.audioMuteBtn.addEventListener('click', () => {
+    isVoiceMuted = !isVoiceMuted;
+    if (els.audioPlayer) els.audioPlayer.muted = isVoiceMuted;
+    localStorage.setItem('agent_muted', isVoiceMuted ? 'true' : 'false');
+    updateMuteUI(isVoiceMuted);
+  });
+}
+
+if (els.autoplayToggle) {
+  const savedAutoplay = localStorage.getItem('agent_autoplay');
+  els.autoplayToggle.checked = savedAutoplay !== 'false';
+  els.autoplayToggle.addEventListener('change', () => {
+    localStorage.setItem('agent_autoplay', els.autoplayToggle.checked ? 'true' : 'false');
+  });
+}
+
+/* View Mode Switching (Cards vs Chat Stream) */
+function switchView(view) {
+  currentView = view;
+  localStorage.setItem('agent_view_mode', view);
+  if (els.viewCardsBtn && els.viewChatBtn) {
+    els.viewCardsBtn.classList.toggle('active', view === 'cards');
+    els.viewChatBtn.classList.toggle('active', view === 'chat');
+  }
+
+  if (history.length > 0) {
+    els.emptyState.hidden = true;
+    if (els.resultsToolbar) els.resultsToolbar.hidden = false;
+    if (view === 'cards') {
+      els.resultPanel.hidden = false;
+      if (els.chatTimelinePanel) els.chatTimelinePanel.hidden = true;
+    } else {
+      els.resultPanel.hidden = true;
+      if (els.chatTimelinePanel) {
+        els.chatTimelinePanel.hidden = false;
+        renderChatStream();
+      }
+    }
+  } else {
+    els.resultPanel.hidden = true;
+    if (els.chatTimelinePanel) els.chatTimelinePanel.hidden = true;
+    els.emptyState.hidden = false;
+    if (els.resultsToolbar) els.resultsToolbar.hidden = true;
+  }
+}
+
+if (els.viewCardsBtn) els.viewCardsBtn.addEventListener('click', () => switchView('cards'));
+if (els.viewChatBtn) els.viewChatBtn.addEventListener('click', () => switchView('chat'));
+
+/* Export Transcript Log */
+function exportTranscriptLog() {
+  if (!history || history.length === 0) {
+    showError('No conversation turns in this session to export.');
+    return;
+  }
+  const dateStr = new Date().toLocaleString();
+  const chronological = [...history].reverse();
+  const md = [
+    `# 🎙️ Customer Call Transcript & AI Resolution Log`,
+    `*Session Exported: ${dateStr}*`,
+    `*Total Dialog Turns: ${history.length}*`,
+    `\n---\n`,
+    chronological.map((turn, i) => {
+      const turnNum = i + 1;
+      const time = new Date(turn.at).toLocaleTimeString();
+      const s = turn.sentiment ? `${turn.sentiment.emoji} ${turn.sentiment.label}` : '⚪ Neutral';
+      const type = turn.aiTakeover ? `AI Voice Takeover (${turn.voice || 'Troy'})` : 'Agent Assisted';
+      const handoffLine = turn.handoff ? `\n> **Escalation**: Ticket #${turn.ticketId || 'Pending'}` : '';
+      const sourcesLine = turn.sources && turn.sources.length ? `\n> **KB Sources**: ${turn.sources.join(' | ')}` : '';
+      const editedLine = turn.edited ? `\n> *(Draft modified by human agent)*` : '';
+
+      return `## Turn ${turnNum} — ${time}
+- **Intent**: \`${turn.intent || 'unknown'}\`
+- **Customer Sentiment**: ${s}
+- **Resolution Type**: ${type}${handoffLine}${sourcesLine}${editedLine}
+
+### Customer:
+> "${turn.transcript}"
+
+### Assistant Response:
+${turn.responseRaw}
+`;
+    }).join('\n---\n')
+  ].join('\n');
+
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `call_transcript_${new Date().toISOString().slice(0, 10)}_${Date.now().toString().slice(-4)}.md`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+if (els.exportTranscriptBtn) {
+  els.exportTranscriptBtn.addEventListener('click', exportTranscriptLog);
+}
+
+/* Chat Stream Timeline Rendering */
+function renderChatStream() {
+  if (!els.chatStreamList || !els.chatCountBadge) return;
+  els.chatCountBadge.textContent = `${history.length} turn${history.length === 1 ? '' : 's'}`;
+  els.chatStreamList.innerHTML = '';
+
+  const chronological = [...history].reverse();
+
+  chronological.forEach(item => {
+    const turn = document.createElement('div');
+    turn.className = 'chat-turn';
+
+    const sentiment = item.sentiment || detectSentiment(item.transcript);
+
+    // Customer message bubble
+    const userMsg = document.createElement('div');
+    userMsg.className = 'chat-bubble chat-bubble-user';
+    userMsg.innerHTML = `
+      <div class="chat-bubble-head">
+        <span class="chat-role-user">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          Customer
+        </span>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span class="sentiment-pill ${sentiment.class}">${sentiment.emoji} ${sentiment.label}</span>
+          <span class="intent-badge">${escapeHtml((item.intent || 'unknown').replace(/_/g, ' '))}</span>
+        </div>
+      </div>
+      <div class="chat-bubble-content">${escapeHtml(item.transcript)}</div>
+      <div class="chat-bubble-meta">
+        <span>${new Date(item.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+      </div>
+    `;
+
+    // Agent response message bubble
+    const botMsg = document.createElement('div');
+    botMsg.className = 'chat-bubble chat-bubble-agent';
+    const isVoice = item.aiTakeover && item.audioUrl;
+    const roleTitle = item.aiTakeover ? `AI Voice Assistant (${item.voice || 'Troy'})` : 'Agent Assist Bot';
+    const editedBadge = item.edited ? '<span class="badge-edited">Edited</span>' : '';
+
+    let audioControlsHtml = '';
+    if (isVoice) {
+      audioControlsHtml = `
+        <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <audio controls src="${item.audioUrl}" style="height:32px;max-width:240px;"></audio>
+          <span class="chat-voice-pill">🔊 Spoken Resolution</span>
+        </div>
+      `;
+    }
+
+    let sourcesHtml = '';
+    if (item.sources && item.sources.length) {
+      sourcesHtml = `
+        <details style="margin-top:8px;font-size:12px;color:var(--muted);cursor:pointer;">
+          <summary style="font-weight:600;">KB Sources (${item.sources.length})</summary>
+          <ul style="margin:6px 0 0 16px;padding:0;">
+            ${item.sources.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
+          </ul>
+        </details>
+      `;
+    }
+
+    let handoffHtml = '';
+    if (item.handoff) {
+      handoffHtml = `<div style="margin-top:6px;font-size:11.5px;color:var(--danger);font-weight:600;">⚠️ Escalated to human agent ${item.ticketId ? `(#${item.ticketId})` : ''}</div>`;
+    }
+
+    const origIdx = history.indexOf(item);
+    botMsg.innerHTML = `
+      <div class="chat-bubble-head">
+        <span class="chat-role-agent">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/></svg>
+          ${roleTitle} ${editedBadge}
+        </span>
+        <button type="button" class="chat-inspect-btn" data-idx="${origIdx}">Inspect Card</button>
+      </div>
+      <div class="chat-bubble-content response-prose">${item.responseHtml || renderMarkdown(item.responseRaw)}</div>
+      ${sourcesHtml}
+      ${audioControlsHtml}
+      ${handoffHtml}
+      <div class="chat-bubble-meta">
+        <span>${new Date(item.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+        ${typeof item.kbScore === 'number' ? `<span>• Match ${(item.kbScore * 100).toFixed(0)}%</span>` : ''}
+      </div>
+    `;
+
+    turn.append(userMsg, botMsg);
+    els.chatStreamList.appendChild(turn);
+  });
+
+  els.chatStreamList.querySelectorAll('.chat-inspect-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx, 10);
+      if (idx >= 0 && history[idx]) {
+        switchView('cards');
+        showResult(history[idx]);
+      }
+    });
+  });
+
+  if (els.chatTimelinePanel) {
+    els.chatTimelinePanel.scrollTop = els.chatTimelinePanel.scrollHeight;
+  }
+}
+
+/* Active Voice Playback Waveform Visualizer */
+function initVoiceVisualizer() {
+  const canvas = els.voiceVisualizer;
+  if (!canvas || !els.audioPlayer) return;
+  const ctx = canvas.getContext('2d');
+
+  function drawIdle() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const count = 16;
+    const barWidth = 3;
+    const gap = 5;
+    const totalW = count * (barWidth + gap) - gap;
+    let x = Math.max(0, (canvas.width - totalW) / 2);
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    ctx.fillStyle = isDark ? 'rgba(34, 211, 238, 0.25)' : 'rgba(8, 145, 178, 0.25)';
+    for (let i = 0; i < count; i++) {
+      const h = 3;
+      const y = (canvas.height - h) / 2;
+      ctx.fillRect(x, y, barWidth, h);
+      x += barWidth + gap;
+    }
+  }
+
+  function startAnimation() {
+    if (voicePlayAnimId) cancelAnimationFrame(voicePlayAnimId);
+    let phase = 0;
+
+    function frame() {
+      if (els.audioPlayer.paused || els.audioPlayer.ended) {
+        drawIdle();
+        return;
+      }
+      voicePlayAnimId = requestAnimationFrame(frame);
+      phase += 0.15;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const count = 16;
+      const barWidth = 3;
+      const gap = 5;
+      const totalW = count * (barWidth + gap) - gap;
+      let x = Math.max(0, (canvas.width - totalW) / 2);
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
+      for (let i = 0; i < count; i++) {
+        const s1 = Math.sin(phase + i * 0.45);
+        const s2 = Math.cos(phase * 0.75 + i * 0.3);
+        const norm = Math.max(0.12, (s1 * 0.5 + s2 * 0.5 + 1) / 2);
+        const h = Math.max(3, Math.round(norm * (canvas.height - 4)));
+        const y = Math.round((canvas.height - h) / 2);
+
+        const grad = ctx.createLinearGradient(0, y, 0, y + h);
+        if (isDark) {
+          grad.addColorStop(0, '#22d3ee');
+          grad.addColorStop(1, '#0284c7');
+        } else {
+          grad.addColorStop(0, '#0891b2');
+          grad.addColorStop(1, '#0369a1');
+        }
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        if (ctx.roundRect) {
+          ctx.roundRect(x, y, barWidth, h, 2);
+        } else {
+          ctx.rect(x, y, barWidth, h);
+        }
+        ctx.fill();
+        x += barWidth + gap;
+      }
+    }
+    frame();
+  }
+
+  els.audioPlayer.addEventListener('play', startAnimation);
+  els.audioPlayer.addEventListener('pause', () => {
+    if (voicePlayAnimId) cancelAnimationFrame(voicePlayAnimId);
+    drawIdle();
+  });
+  els.audioPlayer.addEventListener('ended', () => {
+    if (voicePlayAnimId) cancelAnimationFrame(voicePlayAnimId);
+    drawIdle();
+  });
+
+  drawIdle();
+}
 
 ['up', 'down'].forEach(type => {
   const btn = document.getElementById(`feedback-${type}`);
@@ -423,8 +856,10 @@ function pushHistory(item) {
   history.unshift(item);
   if (history.length > 12) history.pop();
   els.historyCard.hidden = false;
+  if (els.resultsToolbar) els.resultsToolbar.hidden = false;
   renderHistory();
   saveSessionState();
+  if (currentView === 'chat') renderChatStream();
 }
 
 function restoreSessionState() {
@@ -435,12 +870,17 @@ function restoreSessionState() {
     const saved = JSON.parse(raw);
     if (!Array.isArray(saved.history) || !saved.history.length) return;
     history = saved.history;
+    history.forEach(item => {
+      if (!item.sentiment) item.sentiment = detectSentiment(item.transcript);
+    });
     activeIndex = typeof saved.activeIndex === 'number' ? saved.activeIndex : 0;
     if (activeIndex >= history.length) activeIndex = 0;
     current = history[activeIndex];
     els.historyCard.hidden = false;
+    if (els.resultsToolbar) els.resultsToolbar.hidden = false;
     renderHistory();
     if (current) showResult(current);
+    switchView(currentView);
   } catch {}
 }
 
@@ -450,6 +890,9 @@ els.historyClear.addEventListener('click', () => {
   current = null;
   els.historyCard.hidden = true;
   els.resultPanel.hidden = true;
+  if (els.chatTimelinePanel) els.chatTimelinePanel.hidden = true;
+  if (els.chatStreamList) els.chatStreamList.innerHTML = '';
+  if (els.resultsToolbar) els.resultsToolbar.hidden = true;
   els.emptyState.hidden = false;
   try { sessionStorage.removeItem('dashboard_state'); } catch {}
 });
@@ -520,10 +963,12 @@ els.form.addEventListener('submit', async e => {
       })
     });
 
+    const sentiment = detectSentiment(transcript);
     const item = {
       at: Date.now(),
       transcript,
       intent,
+      sentiment,
       aiTakeover: assist.ai_takeover,
       responseRaw: assist.response,
       responseHtml: renderMarkdown(assist.response),
@@ -546,6 +991,7 @@ els.form.addEventListener('submit', async e => {
 });
 
 checkHealth();
+initVoiceVisualizer();
 restoreSessionState();
 
 /* Live microphone recording */

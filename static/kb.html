@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=63">
+  <link rel="stylesheet" href="/static/style.css?v=66">
 </head>
 <body>
   <header class="topbar">
@@ -112,37 +112,56 @@
           <button type="submit" id="kb-add-btn" class="btn-primary" title="Add entry and re-embed immediately">Add entry</button>
         </form>
       </section>
-      <section class="card" aria-label="Test Knowledge Base">
-        <h3 class="card-title">Test Knowledge Base</h3>
-        <p class="kb-hint" style="margin-bottom:8px;">Type a phrase to see top matches & similarity scores.</p>
-        <div class="kb-toolbar" style="margin:0;">
-          <input type="text" id="kb-test-input" placeholder="e.g. 'Where is my order?'" autocomplete="off" />
+      <section class="card kb-side-tools-card" aria-label="Tools and Curation">
+        <div class="kb-side-tabs-nav" role="tablist">
+          <button type="button" class="kb-side-tab-btn active" data-tab="test" id="tab-btn-test" role="tab" aria-selected="true" title="Test similarity matches against Knowledge Base">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span>Test Match</span>
+          </button>
+          <button type="button" class="kb-side-tab-btn" data-tab="unmatched" id="tab-btn-unmatched" role="tab" aria-selected="false" title="Queries that missed the KB and need answers">
+            <span>Needs Answer</span>
+            <span id="unmatched-count" class="kb-tab-badge">0</span>
+          </button>
+          <button type="button" class="kb-side-tab-btn" data-tab="queue" id="tab-btn-queue" role="tab" aria-selected="false" title="Failed tickets waiting in handoff queue">
+            <span>Queue</span>
+            <span id="queue-count" class="kb-tab-badge">0</span>
+          </button>
         </div>
-        <ul id="kb-test-results" class="history-list kb-list" style="margin-top:12px;" hidden></ul>
-      </section>
-      <section class="card kb-unmatched-card" aria-label="Needs Answer">
-        <div class="result-head">
-          <h3 class="card-title">Needs Answer (<span id="unmatched-count">0</span>)</h3>
-          <button type="button" id="unmatched-refresh-btn" class="btn-ghost btn-small" title="Refresh unmatched queries">Refresh</button>
-        </div>
-        <p class="kb-hint" style="margin-bottom:8px;">Queries below similarity threshold. Click <strong>+ Use</strong> to draft an answer.</p>
-        <ul id="unmatched-list" class="kb-unmatched-list"></ul>
-      </section>
-      <section class="card kb-queue-card" aria-label="Handoff Queue">
-        <div class="result-head">
-          <h3 class="card-title">Handoff Queue (<span id="queue-count">0</span>)</h3>
-          <div style="display:flex; gap:6px;">
-            <button type="button" id="queue-replay-all-btn" class="btn-ghost btn-small" title="Replay all queued tickets">Replay All</button>
-            <button type="button" id="queue-refresh-btn" class="btn-ghost btn-small" title="Refresh queue">Refresh</button>
+
+        <!-- Tab 1: Test Match -->
+        <div class="kb-tab-pane active" id="pane-test" role="tabpanel">
+          <p class="kb-hint" style="margin-bottom:8px;">Type a phrase to see top matches &amp; real-time similarity scores.</p>
+          <div class="kb-toolbar" style="margin:0 0 8px;">
+            <input type="text" id="kb-test-input" placeholder="e.g. 'Where is my order?'" autocomplete="off" />
           </div>
+          <ul id="kb-test-results" class="history-list kb-list kb-test-results-list" hidden></ul>
         </div>
-        <p class="kb-hint" style="margin-bottom:8px;">Tickets queued when delivery failed. Replay after fixing webhook or network.</p>
-        <ul id="queue-list" class="kb-unmatched-list"></ul>
+
+        <!-- Tab 2: Needs Answer -->
+        <div class="kb-tab-pane" id="pane-unmatched" role="tabpanel" hidden>
+          <div class="result-head" style="margin-bottom:8px;">
+            <span class="kb-hint" style="margin:0;">Queries below similarity threshold. Click <strong>+ Use</strong> to draft.</span>
+            <button type="button" id="unmatched-refresh-btn" class="btn-ghost btn-small" title="Refresh unmatched queries">Refresh</button>
+          </div>
+          <ul id="unmatched-list" class="kb-unmatched-list"></ul>
+        </div>
+
+        <!-- Tab 3: Handoff Queue -->
+        <div class="kb-tab-pane" id="pane-queue" role="tabpanel" hidden>
+          <div class="result-head" style="margin-bottom:8px;">
+            <span class="kb-hint" style="margin:0;">Failed delivery handoffs.</span>
+            <div style="display:flex; gap:6px;">
+              <button type="button" id="queue-replay-all-btn" class="btn-ghost btn-small" title="Replay all queued tickets">Replay All</button>
+              <button type="button" id="queue-refresh-btn" class="btn-ghost btn-small" title="Refresh queue">Refresh</button>
+            </div>
+          </div>
+          <ul id="queue-list" class="kb-unmatched-list"></ul>
+        </div>
       </section>
     </aside>
   </main>
 
   <script src="/static/theme.js?v=1"></script>
-  <script src="/static/kb.js?v=51"></script>
+  <script src="/static/kb.js?v=52"></script>
 </body>
 </html>
