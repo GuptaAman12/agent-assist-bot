@@ -45,6 +45,12 @@ class KnowledgeBase:
         self._corpus_embeddings = None
         self.reload()
 
+    def _encode(self, texts, convert_to_tensor: bool = True):
+        try:
+            return self._model.encode(texts, convert_to_tensor=convert_to_tensor, show_progress_bar=False)
+        except TypeError:
+            return self._model.encode(texts, convert_to_tensor=convert_to_tensor)
+
     @property
     def count(self) -> int:
         with self._lock:
@@ -122,7 +128,7 @@ class KnowledgeBase:
         # Encode only new/changed entries; never hold the lock during encode.
         fresh: dict[int, torch.Tensor] = {}
         if need_idx:
-            vecs = self._model.encode(
+            vecs = self._encode(
                 [_embed_text(new_active[i].get("question", ""), new_active[i]["response"]) for i in need_idx],
                 convert_to_tensor=True,
             )
@@ -163,13 +169,13 @@ class KnowledgeBase:
         if not response:
             raise ValueError("'response' must be a non-empty string")
         entry = {"id": uuid.uuid4().hex[:8], "question": question.strip(), "response": response, "deleted_at": None}
-        embedding = self._model.encode(_embed_text(entry["question"], response), convert_to_tensor=True)
+        embedding = self._encode(_embed_text(entry["question"], response), convert_to_tensor=True)
         with self._lock:
             self._entries.append(entry)
             # Append to active embeddings
             if self._corpus_embeddings is None or self._corpus_embeddings.numel() == 0:
                 # Rebuild from active to get correct shape
-                self._corpus_embeddings = self._model.encode(_active_embed_texts(self._entries), convert_to_tensor=True)
+                self._corpus_embeddings = self._encode(_active_embed_texts(self._entries), convert_to_tensor=True)
             else:
                 self._corpus_embeddings = torch.cat(
                     [self._corpus_embeddings, embedding.unsqueeze(0)]
@@ -183,7 +189,7 @@ class KnowledgeBase:
         response = response.strip()
         if not response:
             raise ValueError("'response' must be a non-empty string")
-        embedding = self._model.encode(_embed_text(question, response), convert_to_tensor=True)
+        embedding = self._encode(_embed_text(question, response), convert_to_tensor=True)
         with self._lock:
             idx = next((i for i, e in enumerate(self._entries) if e["id"] == entry_id), None)
             if idx is None:
@@ -251,7 +257,7 @@ class KnowledgeBase:
             embeddings = self._corpus_embeddings
             if embeddings is None or embeddings.numel() == 0 or not active:
                 return []
-            query_embedding = self._model.encode(query, convert_to_tensor=True)
+            query_embedding = self._encode(query, convert_to_tensor=True)
             scores = util.pytorch_cos_sim(query_embedding, embeddings)[0]
 
             order = sorted(range(len(scores)), key=lambda i: scores[i].item(), reverse=True)
@@ -288,7 +294,7 @@ class KnowledgeBase:
         # Only keep active for embeddings, but persist all (including soft-deleted if provided)
         active_texts = _active_embed_texts(normalized)
         if active_texts:
-            embeddings = self._model.encode(active_texts, convert_to_tensor=True)
+            embeddings = self._encode(active_texts, convert_to_tensor=True)
         else:
             try:
                 dim = self._model.get_sentence_embedding_dimension()

@@ -1,6 +1,15 @@
 import json
+import logging
 import os
+import warnings
 from pathlib import Path
+
+# Suppress third-party TensorFlow C++ oneDNN info logs and deprecation notices before imports
+os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+warnings.filterwarnings("ignore", category=DeprecationWarning, module=r"(tensorflow|tf_keras).*")
+warnings.filterwarnings("ignore", category=UserWarning, module=r"(tensorflow|tf_keras).*")
+logging.getLogger("tensorflow").setLevel(logging.ERROR)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -84,6 +93,11 @@ AUDIO_MAX_FILES = int(os.getenv("AUDIO_MAX_FILES", "100"))
 AUDIT_LOG_PATH = BASE_DIR / os.getenv("AUDIT_LOG_PATH", "knowledge_base.log.jsonl")
 HANDOFF_QUEUE_PATH = BASE_DIR / os.getenv("HANDOFF_QUEUE_PATH", "handoff_queue.jsonl")
 ANALYTICS_LOG_PATH = BASE_DIR / os.getenv("ANALYTICS_LOG_PATH", "analytics.log.jsonl")
+
+LOG_FORMAT = os.getenv("LOG_FORMAT", "console").lower()
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+LOG_QUIET_STATIC = os.getenv("LOG_QUIET_STATIC", "true").lower() in ("1", "true", "yes")
+LOG_QUIET_HEALTH = os.getenv("LOG_QUIET_HEALTH", "true").lower() in ("1", "true", "yes")
 
 INTENT_KEYWORDS = {
     "speak_to_agent": ("human", "representative", "real person", "live agent"),

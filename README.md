@@ -205,15 +205,21 @@ knowledge_base.json            # RAG corpus
 
 ## 📝 Logging
 
-Logs are structured JSON lines on stdout. Every request produces a `request completed` line (and `request failed` on errors) carrying a `req_id`, and the same ID is echoed back on the response as the `X-Request-ID` header, so a bad request is traceable end to end:
+By default, the terminal displays clean, human-readable one-line logs tailored for local development with noise filtering (suppressing routine static asset traffic and repetitive `/health` polls, while highlighting API calls, handoffs, and errors):
 
-```
-{"ts": "...", "level": "INFO", "logger": "app.access", "message": "request completed",
- "req_id": "8d93452cdd5e", "req_method": "GET", "req_path": "/health",
- "req_status": 200, "req_duration_ms": 0.52}
+```text
+17:45:12 [INFO ] POST /transcribe/ -> 200 (340.5ms) [req=4b2c3d12]
+17:45:13 [INFO ] POST /assist/     -> 200 (112.8ms) [req=5c3d4e34]
+17:45:14 [INFO ] POST /assist/     -> 200 (105.2ms) [req=6d4e5f56] [ticket_id=ticket_123, reason=no_match]
 ```
 
-Any code can read the current request ID via `app.logging.get_request_id()`.
+For production environments or log aggregators (Datadog, Loki, CloudWatch), set `LOG_FORMAT=json` in `.env` to emit structured JSON lines to stdout:
+
+```json
+{"ts": "2026-09-21T17:45:12.123+00:00", "level": "INFO", "logger": "app.access", "message": "request completed", "req_id": "4b2c3d12", "req_method": "POST", "req_path": "/transcribe/", "req_status": 200, "req_duration_ms": 340.5}
+```
+
+Every request echoes back `req_id` as the `X-Request-ID` HTTP header for end-to-end tracing. Routine static asset and health check console filtering can be toggled via `LOG_QUIET_STATIC=true` and `LOG_QUIET_HEALTH=true`. Any code can read the current request ID via `app.logging.get_request_id()`.
 
 ### Test without a microphone
 
