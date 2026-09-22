@@ -463,7 +463,7 @@ agent-assist-bot/
 ├── main.py                     # Thin shim: `from app.main import app`
 ├── Dockerfile                  # Python 3.10-slim, CPU-only PyTorch, non-root user
 ├── docker-compose.yml          # One-command deployment with HF cache volume
-├── .github/workflows/ci.yml   # GitHub Actions CI (pytest on every push)
+├── .github/workflows/ci.yml    # GitHub Actions CI (pytest on every push)
 ├── requirements.txt            # Runtime dependencies (pinned)
 └── requirements-dev.txt        # Test dependencies (pytest + httpx)
 ```
@@ -482,4 +482,4 @@ Please ensure all existing tests continue to pass and add tests for new function
 
 ---
 
-Built with ❤️ by [Aman Gupta](https://github.com/GuptaAman12)
+Built by [Aman Gupta](https://github.com/GuptaAman12)
