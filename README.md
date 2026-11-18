@@ -127,7 +127,7 @@ pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-Automated CI runs on every commit via [GitHub Actions](https://github.com/GuptaAman12/agent-assist-bot/actions).
+Automated CI runs on every push via [GitHub Actions](https://github.com/GuptaAman12/agent-assist-bot/actions).
 
 ---
 
@@ -138,7 +138,7 @@ agent-assist-bot/
 ├── app/               # FastAPI application, routers, pipeline services, and middleware
 ├── docs/              # Detailed API, configuration, and architecture documentation
 ├── static/            # Frontend dashboards (HTML/CSS/JS) and browser MP3 encoder
-├── tests/             # Offline unit and integration test suite (160+ tests)
+├── tests/             # Offline unit and integration test suite (80+ tests)
 ├── audio_sample/      # Sample audio files for manual testing
 ├── knowledge_base.json# Semantic RAG knowledge base dataset
 ├── Dockerfile         # Production container definition
